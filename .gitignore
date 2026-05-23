@@ -9,6 +9,12 @@ client/build/
 build/
 dist/
 
+# Reference mockups
+/Reference/
+
+# Uploaded post images
+/server/uploads/
+
 # Environment files
 .env
 .env.*.local

@@ -1,6 +1,7 @@
 .create-page-shell {
   display: grid;
   gap: 18px;
+  margin-top: 50px;
 }
 
 .create-page-title {
@@ -11,6 +12,11 @@
 }
 
 .create-post-form {
+  display: grid;
+  gap: 16px;
+}
+
+.create-inline-fields {
   display: grid;
   gap: 16px;
 }
@@ -49,6 +55,28 @@
   border-color: var(--brand);
 }
 
+.create-image-hint {
+  margin: 0;
+  color: var(--soft);
+  font-size: 0.92rem;
+}
+
+.create-image-list {
+  display: grid;
+  gap: 8px;
+}
+
+.create-image-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f7f9fc;
+}
+
 .selection-rows {
   display: flex;
   flex-wrap: wrap;
@@ -84,6 +112,13 @@
 
 .create-confirm-btn {
   width: fit-content;
+}
+
+@media (min-width: 768px) {
+  .create-inline-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
 }
 
 @media (max-width: 640px) {

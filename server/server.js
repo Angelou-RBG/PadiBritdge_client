@@ -1,10 +1,13 @@
 const express = require('express')
 const cors = require('cors')
 const path = require('path')
+const fs = require('fs')
 const crypto = require('crypto')
+const multer = require('multer')
 const {
     db,
     databasePath,
+    uploadsDir,
     hashPassword,
     buildUserRow,
     sendDatabaseError,
@@ -14,10 +17,36 @@ const {
 const app = express()
 
 app.use(express.static(path.join(__dirname, 'public')))
+app.use('/uploads', express.static(uploadsDir))
 app.use(cors())
 app.use(express.json())
 
 const port = process.env.PORT || 5000
+
+const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+
+const upload = multer({
+    storage: multer.diskStorage({
+        destination(request, file, callback) {
+            callback(null, uploadsDir)
+        },
+        filename(request, file, callback) {
+            const extension = path.extname(file.originalname || '').toLowerCase()
+            callback(null, `${crypto.randomUUID()}${extension}`)
+        },
+    }),
+    fileFilter(request, file, callback) {
+        if (!allowedImageTypes.has(file.mimetype)) {
+            return callback(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname))
+        }
+
+        return callback(null, true)
+    },
+    limits: {
+        files: 5,
+        fileSize: 5 * 1024 * 1024,
+    },
+})
 
 initializeDatabase(() => {
     app.listen(port, () => {
@@ -128,7 +157,7 @@ app.get('/api/post-types', (request, response) => {
 
 app.get('/api/tags', (request, response) => {
     db.all(
-        'SELECT id, name FROM tags ORDER BY name ASC',
+        'SELECT id, name, color FROM tags ORDER BY name ASC',
         (error, rows) => {
             if (error) {
                 return sendDatabaseError(response, error)
@@ -139,7 +168,37 @@ app.get('/api/tags', (request, response) => {
     )
 })
 
-function mapPostRow(row) {
+function parseTagIds(rawTagIds) {
+    if (Array.isArray(rawTagIds)) {
+        return rawTagIds
+    }
+
+    if (typeof rawTagIds === 'string' && rawTagIds.trim()) {
+        try {
+            const parsedTagIds = JSON.parse(rawTagIds)
+
+            if (Array.isArray(parsedTagIds)) {
+                return parsedTagIds
+            }
+        } catch (parseError) {
+            return []
+        }
+    }
+
+    return []
+}
+
+function mapImageRow(row) {
+    return {
+        id: row.id,
+        url: `/uploads/${row.image_path}`,
+        originalName: row.original_name,
+        mimeType: row.mime_type,
+        sortOrder: row.sort_order,
+    }
+}
+
+function mapPostRow(row, images = []) {
     const tags = typeof row.tags === 'string' && row.tags.trim()
         ? row.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
         : []
@@ -151,9 +210,103 @@ function mapPostRow(row) {
         user: row.full_name,
         postType: row.post_type,
         tags,
+        status: row.status || 'not',
         textBody: row.text_body,
         dateCreated: row.date_created,
+        images,
     }
+}
+
+function cleanupUploadedFiles(files = []) {
+    files.forEach((file) => {
+        if (file?.path && fs.existsSync(file.path)) {
+            try {
+                fs.unlinkSync(file.path)
+            } catch (error) {
+                console.error('Failed to clean up uploaded file:', file.path, error.message)
+            }
+        }
+    })
+}
+
+function loadPostImages(rows, callback) {
+    const safeRows = Array.isArray(rows) ? rows : []
+
+    if (safeRows.length === 0) {
+        return callback(null, [])
+    }
+
+    const postIds = safeRows.map((row) => row.post_id)
+    const placeholders = postIds.map(() => '?').join(', ')
+
+    db.all(
+        `SELECT id, post_id, image_path, original_name, mime_type, sort_order
+         FROM post_images
+         WHERE post_id IN (${placeholders})
+         ORDER BY post_id ASC, sort_order ASC, id ASC`,
+        postIds,
+        (error, imageRows) => {
+            if (error) {
+                return callback(error)
+            }
+
+            const imagesByPostId = new Map()
+
+            ;(Array.isArray(imageRows) ? imageRows : []).forEach((imageRow) => {
+                if (!imagesByPostId.has(imageRow.post_id)) {
+                    imagesByPostId.set(imageRow.post_id, [])
+                }
+
+                imagesByPostId.get(imageRow.post_id).push(mapImageRow(imageRow))
+            })
+
+            return callback(
+                null,
+                safeRows.map((row) => mapPostRow(row, imagesByPostId.get(row.post_id) || []))
+            )
+        }
+    )
+}
+
+function insertPostImages(postId, files, callback) {
+    const imageFiles = Array.isArray(files) ? files : []
+
+    if (imageFiles.length === 0) {
+        return callback(null, [])
+    }
+
+    const insertedImages = []
+
+    function insertNext(index) {
+        if (index >= imageFiles.length) {
+            return callback(null, insertedImages)
+        }
+
+        const file = imageFiles[index]
+
+        db.run(
+            `INSERT INTO post_images (post_id, image_path, original_name, mime_type, sort_order)
+             VALUES (?, ?, ?, ?, ?)`,
+            [postId, file.filename, file.originalname, file.mimetype, index],
+            function (error) {
+                if (error) {
+                    return callback(error)
+                }
+
+                insertedImages.push({
+                    id: this.lastID,
+                    url: `/uploads/${file.filename}`,
+                    originalName: file.originalname,
+                    mimeType: file.mimetype,
+                    sortOrder: index,
+                })
+
+                return insertNext(index + 1)
+            }
+        )
+    }
+
+    return insertNext(0)
 }
 
 app.get('/api/posts', (request, response) => {
@@ -168,6 +321,7 @@ app.get('/api/posts', (request, response) => {
             posts.title,
             posts.post_type,
             posts.tags,
+            posts.status,
             posts.text_body,
             posts.date_created,
             users.full_name
@@ -183,27 +337,123 @@ app.get('/api/posts', (request, response) => {
 
             const safeRows = Array.isArray(rows) ? rows : []
             const hasMore = safeRows.length > limit
-            const posts = safeRows.slice(0, limit).map(mapPostRow)
+            const limitedRows = safeRows.slice(0, limit)
 
-            return response.json({ posts, hasMore })
+            return loadPostImages(limitedRows, (imagesError, posts) => {
+                if (imagesError) {
+                    return sendDatabaseError(response, imagesError)
+                }
+
+                return response.json({ posts, hasMore })
+            })
         }
     )
 })
 
-app.post('/api/posts', (request, response) => {
-    const { userId, title, postTypeId, tagIds, textBody } = request.body || {}
+app.get('/api/posts/:id', (request, response) => {
+    const postId = Number(request.params.id)
 
+    if (!Number.isInteger(postId) || postId <= 0) {
+        return response.status(400).json({ message: 'Valid post id is required.' })
+    }
+
+    db.get(
+        `SELECT
+            posts.post_id,
+            posts.user_id,
+            posts.title,
+            posts.post_type,
+            posts.tags,
+            posts.status,
+            posts.text_body,
+            posts.date_created,
+            users.full_name
+         FROM posts
+         INNER JOIN users ON users.id = posts.user_id
+         WHERE posts.post_id = ?`,
+        [postId],
+        (error, row) => {
+            if (error) {
+                return sendDatabaseError(response, error)
+            }
+
+            if (!row) {
+                return response.status(404).json({ message: 'Post not found.' })
+            }
+
+            if (row.status === 'deleted') {
+                return response.json({
+                    post: {
+                        post_id: row.post_id,
+                        status: row.status,
+                    },
+                })
+            }
+
+            return loadPostImages([row], (imagesError, posts) => {
+                if (imagesError) {
+                    return sendDatabaseError(response, imagesError)
+                }
+
+                return response.json({ post: posts[0] })
+            })
+        }
+    )
+})
+
+app.delete('/api/posts/:id', (request, response) => {
+    const postId = Number(request.params.id)
+
+    if (!Number.isInteger(postId) || postId <= 0) {
+        return response.status(400).json({ message: 'Valid post id is required.' })
+    }
+
+    db.get(
+        'SELECT post_id FROM posts WHERE post_id = ?',
+        [postId],
+        (error, row) => {
+            if (error) {
+                return sendDatabaseError(response, error)
+            }
+
+            if (!row) {
+                return response.status(404).json({ message: 'Post not found.' })
+            }
+
+            db.run(
+                "UPDATE posts SET status = 'deleted' WHERE post_id = ?",
+                [postId],
+                (updateError) => {
+                    if (updateError) {
+                        return sendDatabaseError(response, updateError)
+                    }
+
+                    return response.json({
+                        post: {
+                            post_id: postId,
+                            status: 'deleted',
+                        },
+                    })
+                }
+            )
+        }
+    )
+})
+
+app.put('/api/posts/:id', (request, response) => {
+    const postId = Number(request.params.id)
+
+    if (!Number.isInteger(postId) || postId <= 0) {
+        return response.status(400).json({ message: 'Valid post id is required.' })
+    }
+
+    const { title, postTypeId, tagIds, textBody } = request.body || {}
     const normalizedTitle = String(title || '').trim()
     const normalizedTextBody = String(textBody || '').trim()
-    const normalizedUserId = Number(userId)
     const normalizedPostTypeId = Number(postTypeId)
-    const normalizedTagIds = Array.isArray(tagIds)
-        ? tagIds.map((tagId) => Number(tagId)).filter((tagId) => Number.isInteger(tagId) && tagId > 0)
-        : []
-
-    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
-        return response.status(400).json({ message: 'userId is required.' })
-    }
+    const normalizedTagIds = parseTagIds(tagIds)
+        .map((tagId) => Number(tagId))
+        .filter((tagId) => Number.isInteger(tagId) && tagId > 0)
 
     if (!normalizedTitle || !normalizedTextBody) {
         return response.status(400).json({ message: 'title and textBody are required.' })
@@ -214,66 +464,261 @@ app.post('/api/posts', (request, response) => {
     }
 
     db.get(
-        'SELECT id, name FROM post_types WHERE id = ?',
-        [normalizedPostTypeId],
-        (postTypeError, postTypeRow) => {
-            if (postTypeError) {
-                return sendDatabaseError(response, postTypeError)
+        `SELECT
+            posts.post_id,
+            posts.user_id,
+            posts.status
+         FROM posts
+         WHERE posts.post_id = ?`,
+        [postId],
+        (lookupError, postRow) => {
+            if (lookupError) {
+                return sendDatabaseError(response, lookupError)
             }
 
-            if (!postTypeRow) {
-                return response.status(400).json({ message: 'Selected post type is invalid.' })
+            if (!postRow) {
+                return response.status(404).json({ message: 'Post not found.' })
             }
 
-            if (normalizedTagIds.length === 0) {
-                return insertPost(null, postTypeRow.name)
+            if (postRow.status === 'deleted') {
+                return response.status(410).json({ message: 'Post is unavailable.' })
             }
 
-            const placeholders = normalizedTagIds.map(() => '?').join(', ')
-
-            db.all(
-                `SELECT id, name FROM tags WHERE id IN (${placeholders})`,
-                normalizedTagIds,
-                (tagsError, rows) => {
-                    if (tagsError) {
-                        return sendDatabaseError(response, tagsError)
+            db.get(
+                'SELECT id, name FROM post_types WHERE id = ?',
+                [normalizedPostTypeId],
+                (postTypeError, postTypeRow) => {
+                    if (postTypeError) {
+                        return sendDatabaseError(response, postTypeError)
                     }
 
-                    if (!rows || rows.length !== normalizedTagIds.length) {
-                        return response.status(400).json({ message: 'One or more selected tags are invalid.' })
+                    if (!postTypeRow) {
+                        return response.status(400).json({ message: 'Selected post type is invalid.' })
                     }
 
-                    const tagById = new Map(rows.map((row) => [row.id, row.name]))
-                    const resolvedTags = normalizedTagIds.map((tagId) => tagById.get(tagId)).filter(Boolean)
-
-                    return insertPost(resolvedTags.join(', '), postTypeRow.name)
-                }
-            )
-
-                    function insertPost(tagValue, postTypeName) {
-                db.run(
-                    'INSERT INTO posts (user_id, title, post_type, tags, text_body) VALUES (?, ?, ?, ?, ?)',
-                    [normalizedUserId, normalizedTitle, postTypeName, tagValue, normalizedTextBody],
-                    function (insertError) {
-                        if (insertError) {
-                            return sendDatabaseError(response, insertError)
+                    const resolveTagValue = (callback) => {
+                        if (normalizedTagIds.length === 0) {
+                            return callback(null, null)
                         }
 
-                        return response.status(201).json({
-                            post: {
-                                id: this.lastID,
-                                userId: normalizedUserId,
-                                title: normalizedTitle,
-                                postType: postTypeName,
-                                tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
-                                textBody: normalizedTextBody,
-                            },
-                        })
+                        const placeholders = normalizedTagIds.map(() => '?').join(', ')
+
+                        db.all(
+                            `SELECT id, name FROM tags WHERE id IN (${placeholders})`,
+                            normalizedTagIds,
+                            (tagsError, rows) => {
+                                if (tagsError) {
+                                    return callback(tagsError)
+                                }
+
+                                if (!rows || rows.length !== normalizedTagIds.length) {
+                                    return callback(new Error('One or more selected tags are invalid.'))
+                                }
+
+                                const tagById = new Map(rows.map((row) => [row.id, row.name]))
+                                const resolvedTags = normalizedTagIds.map((tagId) => tagById.get(tagId)).filter(Boolean)
+
+                                return callback(null, resolvedTags.join(', '))
+                            }
+                        )
                     }
-                )
-            }
+
+                    resolveTagValue((tagError, tagValue) => {
+                        if (tagError) {
+                            if (tagError.message === 'One or more selected tags are invalid.') {
+                                return response.status(400).json({ message: tagError.message })
+                            }
+
+                            return sendDatabaseError(response, tagError)
+                        }
+
+                        db.run(
+                            `UPDATE posts
+                             SET title = ?, post_type = ?, tags = ?, text_body = ?
+                             WHERE post_id = ?`,
+                            [normalizedTitle, postTypeRow.name, tagValue, normalizedTextBody, postId],
+                            (updateError) => {
+                                if (updateError) {
+                                    return sendDatabaseError(response, updateError)
+                                }
+
+                                return response.json({
+                                    post: {
+                                        id: postId,
+                                        userId: postRow.user_id,
+                                        title: normalizedTitle,
+                                        postType: postTypeRow.name,
+                                        tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
+                                        status: postRow.status,
+                                        textBody: normalizedTextBody,
+                                    },
+                                })
+                            }
+                        )
+                    })
+                }
+            )
         }
     )
+})
+
+app.post('/api/posts', (request, response) => {
+    upload.array('images', 5)(request, response, (uploadError) => {
+        if (uploadError) {
+            cleanupUploadedFiles(request.files || [])
+
+            if (uploadError instanceof multer.MulterError && uploadError.code === 'LIMIT_FILE_SIZE') {
+                return response.status(400).json({ message: 'Each image must be 5 MB or smaller.' })
+            }
+
+            if (uploadError instanceof multer.MulterError && uploadError.code === 'LIMIT_FILE_COUNT') {
+                return response.status(400).json({ message: 'You can upload up to 5 images.' })
+            }
+
+            if (uploadError instanceof multer.MulterError) {
+                return response.status(400).json({ message: 'Only image files are allowed.' })
+            }
+
+            return response.status(400).json({ message: 'Unable to upload images.' })
+        }
+
+        const uploadedFiles = Array.isArray(request.files) ? request.files : []
+        const { userId, title, postTypeId, tagIds, textBody } = request.body || {}
+
+        const normalizedTitle = String(title || '').trim()
+        const normalizedTextBody = String(textBody || '').trim()
+        const normalizedUserId = Number(userId)
+        const normalizedPostTypeId = Number(postTypeId)
+        const normalizedTagIds = parseTagIds(tagIds)
+            .map((tagId) => Number(tagId))
+            .filter((tagId) => Number.isInteger(tagId) && tagId > 0)
+
+        if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+            cleanupUploadedFiles(uploadedFiles)
+            return response.status(400).json({ message: 'userId is required.' })
+        }
+
+        if (!normalizedTitle || !normalizedTextBody) {
+            cleanupUploadedFiles(uploadedFiles)
+            return response.status(400).json({ message: 'title and textBody are required.' })
+        }
+
+        if (!Number.isInteger(normalizedPostTypeId) || normalizedPostTypeId <= 0) {
+            cleanupUploadedFiles(uploadedFiles)
+            return response.status(400).json({ message: 'postTypeId is required.' })
+        }
+
+        db.get(
+            'SELECT id, name FROM post_types WHERE id = ?',
+            [normalizedPostTypeId],
+            (postTypeError, postTypeRow) => {
+                if (postTypeError) {
+                    cleanupUploadedFiles(uploadedFiles)
+                    return sendDatabaseError(response, postTypeError)
+                }
+
+                if (!postTypeRow) {
+                    cleanupUploadedFiles(uploadedFiles)
+                    return response.status(400).json({ message: 'Selected post type is invalid.' })
+                }
+
+                const resolveTagValue = (callback) => {
+                    if (normalizedTagIds.length === 0) {
+                        return callback(null, null)
+                    }
+
+                    const placeholders = normalizedTagIds.map(() => '?').join(', ')
+
+                    db.all(
+                        `SELECT id, name FROM tags WHERE id IN (${placeholders})`,
+                        normalizedTagIds,
+                        (tagsError, rows) => {
+                            if (tagsError) {
+                                return callback(tagsError)
+                            }
+
+                            if (!rows || rows.length !== normalizedTagIds.length) {
+                                return callback(new Error('One or more selected tags are invalid.'))
+                            }
+
+                            const tagById = new Map(rows.map((row) => [row.id, row.name]))
+                            const resolvedTags = normalizedTagIds.map((tagId) => tagById.get(tagId)).filter(Boolean)
+
+                            return callback(null, resolvedTags.join(', '))
+                        }
+                    )
+                }
+
+                resolveTagValue((tagError, tagValue) => {
+                    if (tagError) {
+                        cleanupUploadedFiles(uploadedFiles)
+
+                        if (tagError.message === 'One or more selected tags are invalid.') {
+                            return response.status(400).json({ message: tagError.message })
+                        }
+
+                        return sendDatabaseError(response, tagError)
+                    }
+
+                    db.run('BEGIN TRANSACTION', (beginError) => {
+                        if (beginError) {
+                            cleanupUploadedFiles(uploadedFiles)
+                            return sendDatabaseError(response, beginError)
+                        }
+
+                        db.run(
+                            'INSERT INTO posts (user_id, title, post_type, tags, status, text_body) VALUES (?, ?, ?, ?, ?, ?)',
+                            [normalizedUserId, normalizedTitle, postTypeRow.name, tagValue, 'not', normalizedTextBody],
+                            function (insertError) {
+                                if (insertError) {
+                                    cleanupUploadedFiles(uploadedFiles)
+
+                                    return db.run('ROLLBACK', () => {
+                                        sendDatabaseError(response, insertError)
+                                    })
+                                }
+
+                                const postId = this.lastID
+
+                                insertPostImages(postId, uploadedFiles, (imageError, insertedImages) => {
+                                    if (imageError) {
+                                        cleanupUploadedFiles(uploadedFiles)
+
+                                        return db.run('ROLLBACK', () => {
+                                            sendDatabaseError(response, imageError)
+                                        })
+                                    }
+
+                                    db.run('COMMIT', (commitError) => {
+                                        if (commitError) {
+                                            cleanupUploadedFiles(uploadedFiles)
+
+                                            return db.run('ROLLBACK', () => {
+                                                sendDatabaseError(response, commitError)
+                                            })
+                                        }
+
+                                        return response.status(201).json({
+                                            post: {
+                                                id: postId,
+                                                userId: normalizedUserId,
+                                                title: normalizedTitle,
+                                                postType: postTypeRow.name,
+                                                tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
+                                                status: 'not',
+                                                textBody: normalizedTextBody,
+                                                images: insertedImages,
+                                            },
+                                        })
+                                    })
+                                })
+                            }
+                        )
+                    })
+                })
+            }
+        )
+    })
 })
 
 app.get('/api/posts/latest', (request, response) => {
@@ -300,8 +745,14 @@ app.get('/api/posts/latest', (request, response) => {
                 return response.status(404).json({ message: 'No posts found.' })
             }
 
-            return response.json({
-                post: mapPostRow(row),
+            return loadPostImages([row], (imagesError, posts) => {
+                if (imagesError) {
+                    return sendDatabaseError(response, imagesError)
+                }
+
+                return response.json({
+                    post: posts[0],
+                })
             })
         }
     )

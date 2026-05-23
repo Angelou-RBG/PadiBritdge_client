@@ -107,6 +107,217 @@ a {
   justify-content: center;
 }
 
+.danger-btn {
+  border-radius: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(185, 28, 28, 0.28);
+  background: #fdecec;
+  color: var(--danger);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.danger-btn:hover,
+.danger-btn:focus-visible {
+  background: #fbe2e2;
+  outline: none;
+}
+
+.floating-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.floating-dropdown__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.floating-dropdown__chevron {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform 180ms ease;
+}
+
+.floating-dropdown[data-open="true"] .floating-dropdown__chevron {
+  transform: rotate(-135deg) translateY(-1px);
+}
+
+.floating-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 220px;
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 222, 234, 0.96);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 45px rgba(24, 34, 51, 0.14);
+  backdrop-filter: blur(14px);
+  transform-origin: top right;
+  animation: floatingDropdownIn 180ms ease-out;
+  z-index: 40;
+}
+
+.floating-dropdown--align-left .floating-dropdown__menu {
+  left: 0;
+  right: auto;
+  transform-origin: top left;
+}
+
+.floating-dropdown__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  text-decoration: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.floating-dropdown__item:hover,
+.floating-dropdown__item:focus-visible {
+  background: var(--brand-soft);
+  color: var(--brand);
+  transform: translateX(2px);
+  outline: none;
+}
+
+.floating-dropdown__item--danger {
+  color: var(--danger);
+}
+
+.floating-dropdown__item--danger:hover,
+.floating-dropdown__item--danger:focus-visible {
+  background: #fdecec;
+  color: var(--danger);
+}
+
+.floating-dropdown__separator {
+  margin: 6px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.floating-card-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(11, 18, 32, 0.45);
+  backdrop-filter: blur(6px);
+}
+
+.floating-card {
+  position: relative;
+  width: min(92vw, 520px);
+  border-radius: 24px;
+  border: 1px solid rgba(216, 222, 234, 0.95);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 60px rgba(24, 34, 51, 0.24);
+  padding: 28px 24px 24px;
+  animation: floatingCardIn 180ms ease-out;
+}
+
+.floating-card__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.floating-card__close:hover,
+.floating-card__close:focus-visible {
+  background: var(--brand-soft);
+  color: var(--brand);
+  outline: none;
+}
+
+.floating-card__title {
+  margin: 0 0 14px;
+  padding-right: 72px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.floating-card__body {
+  display: grid;
+  gap: 18px;
+}
+
+.floating-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@keyframes floatingCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-card {
+    animation: none;
+  }
+}
+
+@keyframes floatingDropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-dropdown__chevron,
+  .floating-dropdown__item,
+  .floating-dropdown__menu {
+    animation: none;
+    transition: none;
+  }
+}
+
 .content-shell {
   display: flex;
   max-width: 960px;

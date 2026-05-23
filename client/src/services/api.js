@@ -22,6 +22,21 @@ export async function getPosts({ limit = 15, offset = 0 } = {}) {
   return response.data;
 }
 
+export async function getPost(postId) {
+  const response = await api.get(`/api/posts/${postId}`);
+  return response.data;
+}
+
+export async function deletePost(postId) {
+  const response = await api.delete(`/api/posts/${postId}`);
+  return response.data;
+}
+
+export async function updatePost(postId, payload) {
+  const response = await api.put(`/api/posts/${postId}`, payload);
+  return response.data;
+}
+
 export async function getPostTypes() {
   const response = await api.get('/api/post-types');
   return response.data;
@@ -33,7 +48,10 @@ export async function getTags() {
 }
 
 export async function createPost(payload) {
-  const response = await api.post('/api/posts', payload);
+  const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData;
+  const response = await api.post('/api/posts', payload, isFormData
+    ? { headers: { 'Content-Type': 'multipart/form-data' } }
+    : undefined);
   return response.data;
 }
 

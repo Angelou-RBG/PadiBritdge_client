@@ -4,36 +4,57 @@ import { getPosts } from '../services/api';
 
 const PAGE_SIZE = 15;
 
+function filterVisiblePosts(posts) {
+  return Array.isArray(posts) ? posts.filter((post) => post?.status !== 'deleted') : [];
+}
+
+async function loadVisiblePostBatch(startOffset) {
+  let currentOffset = startOffset;
+  let hasMore = true;
+  let visiblePosts = [];
+
+  while (visiblePosts.length === 0 && hasMore) {
+    const data = await getPosts({ limit: PAGE_SIZE, offset: currentOffset });
+    const rawPosts = Array.isArray(data?.posts) ? data.posts : [];
+
+    visiblePosts = filterVisiblePosts(rawPosts);
+    currentOffset += rawPosts.length;
+    hasMore = Boolean(data?.hasMore);
+
+    if (rawPosts.length === 0) {
+      break;
+    }
+  }
+
+  return {
+    posts: visiblePosts,
+    nextOffset: currentOffset,
+    hasMore,
+  };
+}
+
 export default function FeedGet() {
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-
-  const offset = posts.length;
+  const [rawOffset, setRawOffset] = useState(0);
 
   useEffect(() => {
     let isActive = true;
 
     async function loadInitialPosts() {
       try {
-        const data = await getPosts({ limit: PAGE_SIZE, offset: 0 });
-        const nextPosts = Array.isArray(data?.posts) ? data.posts : [];
+        const result = await loadVisiblePostBatch(0);
 
         if (!isActive) {
           return;
         }
 
-        if (nextPosts.length === 0) {
-          setHasError(true);
-          setPosts([]);
-          setHasMore(false);
-          return;
-        }
-
-        setPosts(nextPosts);
-        setHasMore(Boolean(data?.hasMore));
+        setPosts(result.posts);
+        setRawOffset(result.nextOffset);
+        setHasMore(result.hasMore);
       } catch (error) {
         if (isActive) {
           setHasError(true);
@@ -66,11 +87,11 @@ export default function FeedGet() {
     setIsLoadingMore(true);
 
     try {
-      const data = await getPosts({ limit: PAGE_SIZE, offset });
-      const nextPosts = Array.isArray(data?.posts) ? data.posts : [];
+      const result = await loadVisiblePostBatch(rawOffset);
 
-      setPosts((currentPosts) => [...currentPosts, ...nextPosts]);
-      setHasMore(Boolean(data?.hasMore));
+      setPosts((currentPosts) => [...currentPosts, ...result.posts]);
+      setRawOffset(result.nextOffset);
+      setHasMore(result.hasMore);
     } catch (error) {
       setHasError(true);
     } finally {
@@ -89,7 +110,7 @@ export default function FeedGet() {
   return (
     <div className="feed-post-list">
       {posts.map((post) => (
-        <PostCard key={post.id} post={post} />
+        <PostCard key={post.id} post={post} linkTo={`/post/${post.id}`} />
       ))}
 
       {hasMore ? (

@@ -11,6 +11,7 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
+  const isFeedShell = /^\/(feed|create)$/.test(location.pathname) || /^\/(post|edit|read)\/[^/]+$/.test(location.pathname);
 
   const profileId = user?.id || user?._id || 'me';
 
@@ -49,7 +50,7 @@ export default function AppLayout() {
                 Profile
               </NavLink>
               <NavLink to="/create" className={navClass}>
-                Create
+                Create Post
               </NavLink>
               <button type="button" className="logout-btn" onClick={handleLogout}>
                 Logout
@@ -63,7 +64,7 @@ export default function AppLayout() {
         <div className="landing-content">
           <Outlet />
         </div>
-      ) : location.pathname === '/feed' ? (
+      ) : isFeedShell ? (
         <div className="feed-content">
           <div className="feed-container">
             <aside className="sidebar scrollable-col">

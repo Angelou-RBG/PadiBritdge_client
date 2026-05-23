@@ -9,6 +9,7 @@ import Edit from './pages/Edit';
 import Feed from './pages/Feed';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
+import Post from './pages/Post';
 import Profile from './pages/Profile';
 import Read from './pages/Read';
 import Signup from './pages/Signup';
@@ -28,6 +29,7 @@ function App() {
               <Route path="/profile/:userId" element={<Profile />} />
               <Route path="/create" element={<Create />} />
               <Route path="/edit/:id" element={<Edit />} />
+              <Route path="/post/:id" element={<Post />} />
               <Route path="/read/:id" element={<Read />} />
             </Route>
 
