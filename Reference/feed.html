@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PadiBridge - Your Feed</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Custom Variables based on Mockup */
+        :root {
+            --bg-light-green: #eaf1ea;
+            --bg-active-green: #c4d4c4;
+            --bg-btn-green: #c5d6c5;
+            --text-dark: #2a313c;
+            --text-muted-green: #596b59;
+            --border-dashed-purple: #b0b8cc;
+            --top-nav-text: #60646b;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #ffffff;
+            margin: 0;
+            overflow: hidden; /* App-like layout, prevents full page scroll */
+        }
+
+        /* Top Navigation Margin Placeholder */
+        .top-margin {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: var(--top-nav-text);
+            background-color: #ffffff;
+        }
+
+        /* App Container Layout */
+        .app-container {
+            height: calc(100vh - 80px);
+            display: flex;
+        }
+
+        /* Scrollable Columns */
+        .scrollable-col {
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        /* --- LEFT SIDEBAR --- */
+        .sidebar {
+            background-color: var(--bg-light-green);
+            padding-top: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            font-weight: 500;
+            font-size: 1.1rem;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-dark);
+            margin-bottom: 10px;
+        }
+        .nav-link-custom {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 20px;
+            color: var(--text-dark);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .nav-link-custom:hover {
+            background-color: #dce7dc;
+            color: var(--text-dark);
+        }
+        .nav-link-custom.active {
+            background-color: var(--bg-active-green);
+            font-weight: 500;
+        }
+        .nav-icon {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: var(--text-dark);
+            stroke-width: 2;
+        }
+        .sidebar-divider {
+            border-top: 1.5px solid var(--text-dark);
+            margin: 20px 0 0 0;
+        }
+
+        /* --- CENTER FEED --- */
+        .feed-area {
+            padding: 30px 40px;
+        }
+        .feed-title {
+            color: var(--text-dark);
+            font-weight: 800;
+            font-size: 2rem;
+            margin-bottom: 25px;
+        }
+        
+        /* Create Post Row */
+        .create-post-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .avatar-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #fff;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+        .btn-create-post {
+            background-color: var(--bg-btn-green);
+            color: var(--text-dark);
+            border: none;
+            font-weight: 700;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            white-space: pre-line;
+            line-height: 1.2;
+            text-align: center;
+        }
+        .text-card-input {
+            background-color: var(--bg-btn-green);
+            color: var(--text-dark);
+            font-weight: 700;
+            border: none;
+            border-radius: 8px;
+            flex-grow: 1;
+            padding: 15px;
+            text-align: center;
+            font-size: 1rem;
+        }
+
+        /* Post Cards */
+        .post-card {
+            background-color: var(--bg-light-green);
+            border-radius: 16px;
+            min-height: 280px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            color: var(--text-muted-green);
+            margin-bottom: 25px;
+            font-weight: 400;
+        }
+
+        /* --- RIGHT MODULES --- */
+        .modules-area {
+            background-color: var(--bg-light-green);
+            padding: 30px;
+        }
+        .module-box {
+            background-color: #ffffff;
+            border: 2px dashed var(--border-dashed-purple);
+            border-radius: 8px;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: #9ba3bc;
+            margin-bottom: 25px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-margin">
+        Navigation Margin
+    </div>
+
+    <div class="container-fluid px-0">
+        <div class="row g-0 app-container">
+            
+            <div class="col-lg-2 col-md-3 sidebar scrollable-col">
+                <div class="sidebar-header">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                    Navigation
+                </div>
+                
+                <a href="#" class="nav-link-custom active">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+                    Homepage
+                </a>
+                <a href="#" class="nav-link-custom">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+                    Future NAV
+                </a>
+                <a href="#" class="nav-link-custom">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+                    Future NAV
+                </a>
+                <a href="#" class="nav-link-custom">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+                    Future NAV
+                </a>
+                <a href="#" class="nav-link-custom">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+                    Future NAV
+                </a>
+                <a href="#" class="nav-link-custom">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+                    Future NAV
+                </a>
+
+                <div class="sidebar-divider"></div>
+                <div class="mt-2">
+                    <a href="#" class="nav-link-custom">
+                        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+                        Nav Item
+                    </a>
+                    <a href="#" class="nav-link-custom">
+                        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+                        Nav Item
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-lg-7 col-md-6 feed-area scrollable-col bg-white">
+                <h1 class="feed-title">Your Feed</h1>
+                
+                <div class="create-post-container">
+                    <div class="avatar-circle">
+                        🌾
+                    </div>
+                    <button class="btn-create-post">Create<br>Post</button>
+                    <div class="text-card-input">Text Card</div>
+                </div>
+
+                <div class="post-card">
+                    &lt;POST CARD&gt;
+                </div>
+                <div class="post-card">
+                    &lt;POST CARD&gt;
+                </div>
+                <div class="post-card">
+                    &lt;POST CARD&gt;
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-3 modules-area scrollable-col">
+                <div class="module-box">
+                    Module
+                </div>
+                <div class="module-box">
+                    Module
+                </div>
+                <div class="module-box">
+                    Module
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
