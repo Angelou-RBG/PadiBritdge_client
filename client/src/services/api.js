@@ -55,4 +55,14 @@ export async function createPost(payload) {
   return response.data;
 }
 
+export async function getComments(postId) {
+  const response = await api.get(`/api/posts/${postId}/comments`);
+  return response.data;
+}
+
+export async function addComment(postId, commentData) {
+  const response = await api.post(`/api/posts/${postId}/comments`, commentData);
+  return response.data;
+}
+
 export default api;

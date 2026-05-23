@@ -122,9 +122,45 @@ function initializeDatabase(callback) {
                                                                     process.exit(1)
                                                                 }
 
-                                                                if (typeof callback === 'function') {
-                                                                    callback()
-                                                                }
+                                                                db.run(
+                                                                    `CREATE TABLE IF NOT EXISTS comment_sections (
+                                                                        comment_section_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                                        post_id INTEGER NOT NULL,
+                                                                        status TEXT NOT NULL DEFAULT 'active',
+                                                                        FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
+                                                                    )`,
+                                                                    (commentSectionError) => {
+                                                                        if (commentSectionError) {
+                                                                            console.error('Failed to prepare comment_sections table:', commentSectionError.message)
+                                                                            process.exit(1)
+                                                                        }
+
+                                                                        db.run(
+                                                                            `CREATE TABLE IF NOT EXISTS comments (
+                                                                                comment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                                                user_id INTEGER NOT NULL,
+                                                                                replying_to INTEGER,
+                                                                                comment_section_id INTEGER NOT NULL,
+                                                                                content TEXT NOT NULL,
+                                                                                date_sent TEXT DEFAULT CURRENT_TIMESTAMP,
+                                                                                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                                                                                FOREIGN KEY (replying_to) REFERENCES comments(comment_id) ON DELETE CASCADE,
+                                                                                FOREIGN KEY (comment_section_id) REFERENCES comment_sections(comment_section_id) ON DELETE CASCADE
+                                                                            )`,
+                                                                            (commentsTableError) => {
+                                                                                if (commentsTableError) {
+                                                                                    console.error('Failed to prepare comments table:', commentsTableError.message)
+                                                                                    process.exit(1)
+                                                                                }
+
+                                                                                if (typeof callback === 'function') {
+                                                                                    callback()
+                                                                                }
+                                                                            }
+                                                                        )
+                                                                    }
+                                                                )
+
                                                             }
                                                         )
                                                     }

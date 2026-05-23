@@ -1,0 +1,39 @@
+.comment-cell {
+    margin-top: 1rem;
+}
+
+.comment-cell-main {
+    padding: 0.75rem;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+}
+
+.comment-author {
+    font-weight: bold;
+    margin: 0 0 0.25rem;
+}
+
+.comment-content {
+    margin: 0 0 0.5rem;
+}
+
+.comment-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.comment-replies {
+    margin-left: 2rem;
+    padding-left: 1rem;
+    border-left: 2px solid #e0e0e0;
+}
+
+.reply-form {
+    margin-top: 0.75rem;
+    padding-left: 1rem;
+    flex-wrap: wrap;
+    /* The comment-form class from CommentSection.css handles flex layout */
+}

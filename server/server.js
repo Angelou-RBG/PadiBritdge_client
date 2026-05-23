@@ -401,6 +401,105 @@ app.get('/api/posts/:id', (request, response) => {
     )
 })
 
+app.get('/api/posts/:id/comments', (request, response) => {
+    const postId = Number(request.params.id)
+
+    if (!Number.isInteger(postId) || postId <= 0) {
+        return response.status(400).json({ message: 'Valid post id is required.' })
+    }
+
+    db.get('SELECT comment_section_id FROM comment_sections WHERE post_id = ?', [postId], (error, section) => {
+        if (error) {
+            return sendDatabaseError(response, error)
+        }
+
+        if (!section) {
+            return response.json({ comments: [] })
+        }
+
+        const commentSectionId = section.comment_section_id
+
+        db.all(
+            `SELECT c.*, u.full_name
+             FROM comments c
+             JOIN users u ON c.user_id = u.id
+             WHERE c.comment_section_id = ?
+             ORDER BY c.date_sent ASC`,
+            [commentSectionId],
+            (commentsError, comments) => {
+                if (commentsError) {
+                    return sendDatabaseError(response, commentsError)
+                }
+
+                return response.json({ comments: comments || [] })
+            }
+        )
+    })
+})
+
+app.post('/api/posts/:id/comments', (request, response) => {
+    const postId = Number(request.params.id)
+    const { userId, content, replyingTo } = request.body || {}
+
+    if (!Number.isInteger(postId) || postId <= 0) {
+        return response.status(400).json({ message: 'Valid post id is required.' })
+    }
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+        return response.status(400).json({ message: 'userId is required.' })
+    }
+
+    const normalizedContent = String(content || '').trim()
+    if (!normalizedContent) {
+        return response.status(400).json({ message: 'Comment content cannot be empty.' })
+    }
+
+    const normalizedReplyingTo = replyingTo ? Number(replyingTo) : null
+    if (replyingTo && (!Number.isInteger(normalizedReplyingTo) || normalizedReplyingTo <= 0)) {
+        return response.status(400).json({ message: 'Invalid replying_to value.' })
+    }
+
+    db.get('SELECT comment_section_id FROM comment_sections WHERE post_id = ?', [postId], (error, section) => {
+        if (error) {
+            return sendDatabaseError(response, error)
+        }
+
+        if (!section) {
+            return response.status(404).json({ message: 'Comment section for this post not found.' })
+        }
+
+        const commentSectionId = section.comment_section_id
+
+        const columns = ['user_id', 'comment_section_id', 'content']
+        const values = [userId, commentSectionId, normalizedContent]
+        const placeholders = ['?', '?', '?']
+
+        if (normalizedReplyingTo) {
+            columns.push('replying_to')
+            values.push(normalizedReplyingTo)
+            placeholders.push('?')
+        }
+
+        const sql = `INSERT INTO comments (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`
+
+        db.run(sql, values, function (insertError) {
+            if (insertError) {
+                return sendDatabaseError(response, insertError)
+            }
+
+            const newCommentId = this.lastID
+
+            db.get('SELECT c.*, u.full_name FROM comments c JOIN users u ON c.user_id = u.id WHERE c.comment_id = ?', [newCommentId], (fetchError, newComment) => {
+                if (fetchError) {
+                    return response.status(201).json({ comment: { id: newCommentId } })
+                }
+
+                return response.status(201).json({ comment: newComment })
+            })
+        })
+    })
+})
+
 app.delete('/api/posts/:id', (request, response) => {
     const postId = Number(request.params.id)
 
@@ -680,38 +779,51 @@ app.post('/api/posts', (request, response) => {
 
                                 const postId = this.lastID
 
-                                insertPostImages(postId, uploadedFiles, (imageError, insertedImages) => {
-                                    if (imageError) {
-                                        cleanupUploadedFiles(uploadedFiles)
-
-                                        return db.run('ROLLBACK', () => {
-                                            sendDatabaseError(response, imageError)
-                                        })
-                                    }
-
-                                    db.run('COMMIT', (commitError) => {
-                                        if (commitError) {
+                                db.run(
+                                    'INSERT INTO comment_sections (post_id) VALUES (?)',
+                                    [postId],
+                                    (commentSectionError) => {
+                                        if (commentSectionError) {
                                             cleanupUploadedFiles(uploadedFiles)
-
                                             return db.run('ROLLBACK', () => {
-                                                sendDatabaseError(response, commitError)
+                                                sendDatabaseError(response, commentSectionError)
                                             })
                                         }
 
-                                        return response.status(201).json({
-                                            post: {
-                                                id: postId,
-                                                userId: normalizedUserId,
-                                                title: normalizedTitle,
-                                                postType: postTypeRow.name,
-                                                tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
-                                                status: 'not',
-                                                textBody: normalizedTextBody,
-                                                images: insertedImages,
-                                            },
+                                        insertPostImages(postId, uploadedFiles, (imageError, insertedImages) => {
+                                            if (imageError) {
+                                                cleanupUploadedFiles(uploadedFiles)
+
+                                                return db.run('ROLLBACK', () => {
+                                                    sendDatabaseError(response, imageError)
+                                                })
+                                            }
+
+                                            db.run('COMMIT', (commitError) => {
+                                                if (commitError) {
+                                                    cleanupUploadedFiles(uploadedFiles)
+
+                                                    return db.run('ROLLBACK', () => {
+                                                        sendDatabaseError(response, commitError)
+                                                    })
+                                                }
+
+                                                return response.status(201).json({
+                                                    post: {
+                                                        id: postId,
+                                                        userId: normalizedUserId,
+                                                        title: normalizedTitle,
+                                                        postType: postTypeRow.name,
+                                                        tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
+                                                        status: 'not',
+                                                        textBody: normalizedTextBody,
+                                                        images: insertedImages,
+                                                    },
+                                                })
+                                            })
                                         })
-                                    })
-                                })
+                                    }
+                                )
                             }
                         )
                     })

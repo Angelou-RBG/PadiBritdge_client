@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import CommentSection from '../components/CommentSection';
 import FloatingDropdown from '../components/FloatingDropdown';
 import DeletePostCard from '../components/DeletePostCard';
 import NotificationBean from '../components/NotificationBean';
@@ -241,6 +242,8 @@ export default function Post() {
       ) : null}
 
       <div className="post-page-body">{post?.textBody || 'No post body available.'}</div>
+
+      <CommentSection postId={postId} />
     </section>
   );
 }
