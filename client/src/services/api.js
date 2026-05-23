@@ -1,0 +1,40 @@
+import axios from 'axios';
+
+const baseURL = process.env.REACT_APP_API_BASE_URL || '';
+
+const api = axios.create({
+  baseURL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export async function getLatestPost() {
+  const response = await api.get('/api/posts/latest');
+  return response.data;
+}
+
+export async function getPosts({ limit = 15, offset = 0 } = {}) {
+  const response = await api.get('/api/posts', {
+    params: { limit, offset },
+  });
+
+  return response.data;
+}
+
+export async function getPostTypes() {
+  const response = await api.get('/api/post-types');
+  return response.data;
+}
+
+export async function getTags() {
+  const response = await api.get('/api/tags');
+  return response.data;
+}
+
+export async function createPost(payload) {
+  const response = await api.post('/api/posts', payload);
+  return response.data;
+}
+
+export default api;

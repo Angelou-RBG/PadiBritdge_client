@@ -1,0 +1,251 @@
+:root {
+  --bg: #f4f5f9;
+  --text: #182233;
+  --soft: #5a6780;
+  --brand: #1d4ed8;
+  --brand-green: #678c4f;
+  --dark-btn: #344054;
+  --brand-soft: #dbeafe;
+  --panel: #ffffff;
+  --border: #d8deea;
+  --danger: #b91c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(160deg, #eef2ff 0%, #f8fafc 42%, #ecfeff 100%);
+  color: var(--text);
+}
+
+a {
+  color: var(--brand);
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+}
+
+.brand {
+  font-weight: 800;
+  color: var(--brand-green);
+  text-decoration: none;
+  letter-spacing: 0.4px;
+}
+
+.nav-items {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-link {
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--brand-green);
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin: 0 10px;
+  padding: 6px 12px;
+}
+
+.nav-link.active {
+  color: var(--brand);
+  border-color: var(--brand-soft);
+  background: var(--brand-soft);
+}
+
+.logout-btn,
+.primary-btn,
+.ghost-btn {
+  border-radius: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Dark custom button similar to reference landing.html */
+.btn-dark-custom,
+.logout-btn {
+  background-color: var(--dark-btn);
+  color: white;
+  border-radius: 4px;
+  padding: 8px 20px;
+  border: none;
+}
+
+.primary-btn {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+  text-decoration: none;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.ghost-btn {
+  text-decoration: none;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.content-shell {
+  display: flex;
+  max-width: 960px;
+  justify-content: center;
+  margin: 0 auto;
+  padding: 26px 16px 42px;
+}
+
+/* Landing page should occupy full width when rendered inside AppLayout */
+.landing-content {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.page-shell {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.card-shell {
+  width: 100%;
+  max-width: 500%;
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.form-shell {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.form-shell input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-text {
+  color: var(--danger);
+  margin: 0;
+}
+
+.helper-text {
+  color: var(--soft);
+  margin-top: 8px;
+}
+
+.notification-bean {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(92vw, 560px);
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(24, 34, 51, 0.08);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.notification-bean__label {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notification-bean__message {
+  flex: 1;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .notification-bean {
+    top: 12px;
+    width: calc(100vw - 24px);
+  }
+}
+
+.notification-bean--success {
+  background: #edf6e7;
+  border-color: rgba(103, 140, 79, 0.45);
+  color: #345024;
+}
+
+.notification-bean--error {
+  background: #fdecec;
+  border-color: rgba(185, 28, 28, 0.42);
+  color: var(--danger);
+}
+
+.feed-post-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.load-more-btn {
+  width: fit-content;
+  justify-self: center;
+  margin-top: 4px;
+}
+
+.list-card {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+@media (max-width: 640px) {
+  .top-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .nav-items {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,71 @@
+:root {
+    --brand-green: #678c4f;
+    --dark-btn: #344054;
+    --hero-bg: #b5beb5;
+    --footer-bg: #5a7755;
+    --wf-gray: #aab2c8;
+    --card-bg: #f3f5f9;
+}
+
+/* Simple landing-specific layout and components */
+.landing-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 24px;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    color: var(--brand-green);
+    font-size: 1.3rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.hero-section {
+    background-color: var(--hero-bg);
+    padding: 80px 16px;
+    color: #fff;
+    text-align: center;
+}
+.hero-section h1 { font-size: 2.6rem; margin-bottom: 8px; }
+.hero-section h4 { font-weight: 600; margin-bottom: 12px; }
+.hero-section p { max-width: 720px; margin: 0 auto 20px; color: #fff; opacity: 0.95; }
+
+.action-row { display:flex; gap:12px; justify-content:center; margin-top:16px; }
+.primary-btn, .btn-green { background: var(--brand-green); color: #fff; padding:10px 22px; border-radius:6px; text-decoration:none; display:inline-block; }
+.ghost-btn, .btn-outline-white { background:transparent; color:#fff; border:2px solid #fff; padding:8px 20px; border-radius:6px; text-decoration:none; display:inline-block; }
+
+.wf-box-green { background-color: var(--brand-green); height: 30px; width: 40%; margin: 12px auto; border-radius:2px; }
+.wf-line { background-color: var(--wf-gray); height: 10px; margin: 8px auto; border-radius:2px; }
+.wf-line.long { width: 60%; }
+.wf-line.med { width: 50%; }
+.wf-line.short { width: 40%; }
+
+.cards-section { padding: 36px 16px; text-align:center; }
+.cards-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:18px; max-width:980px; margin:0 auto; }
+.card-custom { border:1px solid #333; border-radius:6px; overflow:hidden; background:#fff; text-align:left; }
+.card-img-placeholder { background: var(--card-bg); height:140px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #333; }
+.card-body-custom { padding:16px; }
+.wf-card-title { background: var(--brand-green); height:22px; width:60%; margin-bottom:12px; border-radius:2px; }
+.wf-card-line { background: var(--wf-gray); height:8px; margin-bottom:8px; border-radius:2px; width:100%; }
+.wf-card-line.short { width:70%; }
+
+.footer-slot-section { background: var(--footer-bg); padding: 40px 16px; color:#fff; }
+.dashed-slot { background: #fff; border:2px dashed #ccc; height:120px; display:flex; align-items:center; justify-content:center; color:#aab2c8; font-size:1.1rem; border-radius:6px; }
+
+/* Small responsive tweaks */
+@media (max-width:520px){
+  .hero-section h1 { font-size:1.8rem; }
+  .hero-section { padding:48px 12px; }
+}
+
+/* Full-width container for landing page sections */
+.landing-container {
+    max-width: 100%;
+    width: 100%;
+    padding: 0 18px;
+    margin: 0 auto;
+}
