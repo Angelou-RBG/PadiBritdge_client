@@ -1161,9 +1161,9 @@ app.post('/api/inventory-logs', (request, response) => {
 })
 
 app.post('/api/order-rfqs', (request, response) => {
-    const { buyerId, millerId, varietyId, requestedSacks } = request.body || {}
+    const { buyerId, millerId, varietyId, requestedSacks, fulfillmentDeadline } = request.body || {}
 
-    if (!buyerId || !millerId || !varietyId || requestedSacks === undefined) {
+    if (!buyerId || !millerId || !varietyId || requestedSacks === undefined || !fulfillmentDeadline) {
         return response.status(400).json({ message: 'Missing required fields for allocation request.' })
     }
 
@@ -1173,8 +1173,8 @@ app.post('/api/order-rfqs', (request, response) => {
     }
 
     db.run(
-        `INSERT INTO order_rfqs (buyer_id, miller_id, variety_id, requested_sacks, status) VALUES (?, ?, ?, ?, 'Pending')`,
-        [buyerId, millerId, varietyId, sacks],
+        `INSERT INTO order_rfqs (buyer_id, miller_id, variety_id, requested_sacks, fulfillment_deadline, status) VALUES (?, ?, ?, ?, ?, 'Pending')`,
+        [buyerId, millerId, varietyId, sacks, fulfillmentDeadline],
         function (insertError) {
             if (insertError) return sendDatabaseError(response, insertError)
             return response.status(201).json({ orderId: this.lastID })
@@ -1183,30 +1183,75 @@ app.post('/api/order-rfqs', (request, response) => {
 })
 
 app.get('/api/order-rfqs', (request, response) => {
-    const { buyerId, millerId } = request.query
-    let sql = `SELECT o.*, rv.name AS variety_name, rv.quality_grade FROM order_rfqs o LEFT JOIN rice_varieties rv ON o.variety_id = rv.variety_id WHERE 1=1`
-    const params = []
-    if (buyerId) { sql += ` AND o.buyer_id = ?`; params.push(Number(buyerId)) }
-    if (millerId) { sql += ` AND o.miller_id = ?`; params.push(Number(millerId)) }
-    sql += ` ORDER BY o.order_id DESC`
-    db.all(sql, params, (error, rows) => {
-        if (error) return sendDatabaseError(response, error)
-        return response.json({ orderRfqs: rows || [] })
+    db.run(`UPDATE order_rfqs SET status = 'Expired' WHERE status = 'Pending' AND date(fulfillment_deadline) < date('now', 'localtime')`, () => {
+        db.run(`UPDATE order_rfqs SET status = 'Late' WHERE status = 'Approved' AND date(fulfillment_deadline) < date('now', 'localtime')`, () => {
+            const { buyerId, millerId } = request.query
+            let sql = `SELECT o.*, rv.name AS variety_name, rv.quality_grade FROM order_rfqs o LEFT JOIN rice_varieties rv ON o.variety_id = rv.variety_id WHERE 1=1`
+            const params = []
+            if (buyerId) { sql += ` AND o.buyer_id = ?`; params.push(Number(buyerId)) }
+            if (millerId) { sql += ` AND o.miller_id = ?`; params.push(Number(millerId)) }
+            sql += ` ORDER BY o.order_id DESC`
+            db.all(sql, params, (error, rows) => {
+                if (error) return sendDatabaseError(response, error)
+                return response.json({ orderRfqs: rows || [] })
+            })
+        })
     })
 })
 
 app.put('/api/order-rfqs/:id', (request, response) => {
+    const orderId = Number(request.params.id)
     const { status } = request.body || {}
-    db.run(`UPDATE order_rfqs SET status = ? WHERE order_id = ?`, [status || 'Pending', Number(request.params.id)], (error) => {
+
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+        return response.status(400).json({ message: 'Valid order id is required.' })
+    }
+
+    if (!['Approved', 'Rejected', 'Pending', 'Late', 'Expired'].includes(status)) {
+        return response.status(400).json({ message: 'Invalid status.' })
+    }
+
+    db.get('SELECT * FROM order_rfqs WHERE order_id = ?', [orderId], (error, order) => {
         if (error) return sendDatabaseError(response, error)
-        return response.json({ message: 'Order status updated successfully.' })
+        if (!order) return response.status(404).json({ message: 'Order not found.' })
+
+        if (order.status === status) {
+            return response.json({ message: 'Order status updated successfully.' })
+        }
+
+        db.run('BEGIN TRANSACTION', (beginError) => {
+            if (beginError) return sendDatabaseError(response, beginError)
+
+            db.run(`UPDATE order_rfqs SET status = ? WHERE order_id = ?`, [status, orderId], (updateError) => {
+                if (updateError) return db.run('ROLLBACK', () => sendDatabaseError(response, updateError))
+
+                if (status === 'Approved' && order.status !== 'Approved') {
+                    db.run(
+                        `UPDATE stock_listing SET allocated_sacks = allocated_sacks + ?, last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`,
+                        [order.requested_sacks, order.miller_id, order.variety_id],
+                        (stockError) => {
+                            if (stockError) return db.run('ROLLBACK', () => sendDatabaseError(response, stockError))
+                            db.run('COMMIT', (commitError) => {
+                                if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                                return response.json({ message: 'Order approved and stock allocated.' })
+                            })
+                        }
+                    )
+                } else {
+                    db.run('COMMIT', (commitError) => {
+                        if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                        return response.json({ message: 'Order status updated successfully.' })
+                    })
+                }
+            })
+        })
     })
 })
 
 app.post('/api/external-rfqs', (request, response) => {
-    const { buyerName, millerId, varietyId, requestedSacks } = request.body || {}
+    const { buyerName, millerId, varietyId, requestedSacks, fulfillmentDeadline } = request.body || {}
 
-    if (!buyerName || !millerId || !varietyId || requestedSacks === undefined) {
+    if (!buyerName || !millerId || !varietyId || requestedSacks === undefined || !fulfillmentDeadline) {
         return response.status(400).json({ message: 'Missing required fields for external allocation request.' })
     }
 
@@ -1216,8 +1261,8 @@ app.post('/api/external-rfqs', (request, response) => {
     }
 
     db.run(
-        `INSERT INTO external_rfqs (buyer_name, miller_id, variety_id, requested_sacks, status) VALUES (?, ?, ?, ?, 'Pending')`,
-        [buyerName, millerId, varietyId, sacks],
+        `INSERT INTO external_rfqs (buyer_name, miller_id, variety_id, requested_sacks, fulfillment_deadline, status) VALUES (?, ?, ?, ?, ?, 'Pending')`,
+        [buyerName, millerId, varietyId, sacks, fulfillmentDeadline],
         function (insertError) {
             if (insertError) return sendDatabaseError(response, insertError)
             return response.status(201).json({ orderId: this.lastID })
@@ -1226,19 +1271,26 @@ app.post('/api/external-rfqs', (request, response) => {
 })
 
 app.get('/api/external-rfqs', (request, response) => {
-    const { millerId } = request.query
-    let sql = `SELECT e.*, rv.name AS variety_name, rv.quality_grade FROM external_rfqs e LEFT JOIN rice_varieties rv ON e.variety_id = rv.variety_id WHERE 1=1`
-    const params = []
-    if (millerId) { sql += ` AND e.miller_id = ?`; params.push(Number(millerId)) }
-    sql += ` ORDER BY e.order_id DESC`
-    db.all(sql, params, (error, rows) => {
-        if (error) return sendDatabaseError(response, error)
-        return response.json({ externalRfqs: rows || [] })
+    db.run(`UPDATE external_rfqs SET status = 'Expired' WHERE status = 'Pending' AND date(fulfillment_deadline) < date('now', 'localtime')`, () => {
+        db.run(`UPDATE external_rfqs SET status = 'Late' WHERE status = 'Approved' AND date(fulfillment_deadline) < date('now', 'localtime')`, () => {
+            const { millerId } = request.query
+            let sql = `SELECT e.*, rv.name AS variety_name, rv.quality_grade FROM external_rfqs e LEFT JOIN rice_varieties rv ON e.variety_id = rv.variety_id WHERE 1=1`
+            const params = []
+            if (millerId) { sql += ` AND e.miller_id = ?`; params.push(Number(millerId)) }
+            sql += ` ORDER BY e.order_id DESC`
+            db.all(sql, params, (error, rows) => {
+                if (error) return sendDatabaseError(response, error)
+                return response.json({ externalRfqs: rows || [] })
+            })
+        })
     })
 })
 
 app.put('/api/external-rfqs/:id', (request, response) => {
     const { status } = request.body || {}
+    if (!['Approved', 'Rejected', 'Pending', 'Late', 'Expired'].includes(status)) {
+        return response.status(400).json({ message: 'Invalid status.' })
+    }
     db.run(`UPDATE external_rfqs SET status = ? WHERE order_id = ?`, [status || 'Pending', Number(request.params.id)], (error) => {
         if (error) return sendDatabaseError(response, error)
         return response.json({ message: 'External order status updated successfully.' })

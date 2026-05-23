@@ -215,6 +215,8 @@ function initializeDatabase(callback) {
                                                                                                                 variety_id INTEGER NOT NULL,
                                                                                                                 requested_sacks INTEGER NOT NULL,
                                                                                                                 status TEXT NOT NULL DEFAULT 'Pending',
+                                                                                                                date_recorded TEXT DEFAULT (datetime('now', 'localtime')),
+                                                                                                                fulfillment_deadline TEXT NOT NULL,
                                                                                                                 FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE,
                                                                                                                 FOREIGN KEY (miller_id) REFERENCES users(id) ON DELETE CASCADE,
                                                                                                                 FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id)
@@ -233,6 +235,8 @@ function initializeDatabase(callback) {
                                                                                                                         variety_id INTEGER NOT NULL,
                                                                                                                         requested_sacks INTEGER NOT NULL,
                                                                                                                         status TEXT NOT NULL DEFAULT 'Pending',
+                                                                                                                        date_recorded TEXT DEFAULT (datetime('now', 'localtime')),
+                                                                                                                        fulfillment_deadline TEXT NOT NULL,
                                                                                                                         FOREIGN KEY (miller_id) REFERENCES users(id) ON DELETE CASCADE,
                                                                                                                         FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id)
                                                                                                                     )`,

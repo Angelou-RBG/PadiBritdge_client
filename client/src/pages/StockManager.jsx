@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StockListing from '../components/StockListing';
+import RFQSListing from '../components/RFQSListing';
 import FloatingCard from '../components/FloatingCard';
 import NotificationBean from '../components/NotificationBean';
 import { useAuth } from '../context/AuthContext';
@@ -27,6 +28,7 @@ export default function StockManager() {
   const [quantity, setQuantity] = useState('');
   const [buyerId, setBuyerId] = useState('');
   const [buyerName, setBuyerName] = useState('');
+  const [fulfillmentDeadline, setFulfillmentDeadline] = useState('');
   const [referenceId, setReferenceId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -55,6 +57,7 @@ export default function StockManager() {
           millerId: user?.id || user?._id,
           varietyId: selectedVariety,
           requestedSacks: Number(quantity),
+          fulfillmentDeadline: fulfillmentDeadline || null,
         });
       } else {
         await createExternalRfq({
@@ -62,6 +65,7 @@ export default function StockManager() {
           millerId: user?.id || user?._id,
           varietyId: selectedVariety,
           requestedSacks: Number(quantity),
+          fulfillmentDeadline: fulfillmentDeadline || null,
         });
       }
 
@@ -71,6 +75,7 @@ export default function StockManager() {
       setQuantity('');
       setBuyerId('');
       setBuyerName('');
+      setFulfillmentDeadline('');
     } catch (error) {
       setNotification({ type: 'error', message: error.response?.data?.message || 'Failed to add allocation request.' });
     } finally {
@@ -138,10 +143,12 @@ export default function StockManager() {
         Back
       </button>
       
-      <h2 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Stock Manager</h2>
+      <h2 style={{ marginTop: 0, marginBottom: '0.5rem' }}>PadiManage System</h2>
       <p style={{ marginBottom: '2rem' }}>Manage your inventory records, update stock volumes, and generate reports.</p>
 
-      <StockListing isManagerView onAddRecord={() => setIsAddModalOpen(true)} onModifyRecord={() => setIsModifyModalOpen(true)} refreshKey={refreshKey} />
+      <StockListing isManagerView onModifyRecord={() => setIsModifyModalOpen(true)} refreshKey={refreshKey} />
+
+      <RFQSListing onAddRecord={() => setIsAddModalOpen(true)} refreshKey={refreshKey} onRfqUpdate={() => setRefreshKey(prev => prev + 1)} />
 
       <FloatingCard
         open={isAddModalOpen}
@@ -178,6 +185,9 @@ export default function StockManager() {
 
           <label htmlFor="quantity">Requested Volume (Sacks)</label>
           <input id="quantity" type="number" step="1" placeholder="e.g. 50" value={quantity} onChange={e => setQuantity(e.target.value)} required disabled={isSubmitting} />
+
+          <label htmlFor="fulfillment-deadline">Fulfillment Deadline</label>
+          <input id="fulfillment-deadline" type="date" value={fulfillmentDeadline} onChange={e => setFulfillmentDeadline(e.target.value)} required disabled={isSubmitting} />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
             <button type="submit" className="primary-btn" disabled={isSubmitting}>

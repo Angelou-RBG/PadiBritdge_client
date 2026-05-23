@@ -159,7 +159,7 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
 
       {isProfileView && !isManagerView && (
         <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="primary-btn" onClick={() => navigate('/stock-manager')}>Manage Stock</button>
+          <button type="button" className="primary-btn" onClick={() => navigate('/stock-manager')}>Open PadiManage</button>
           <button type="button" className="ghost-btn">Post Stock Listing</button>
           <button type="button" className="ghost-btn">Export Inventory to CSV</button>
           <button type="button" className="ghost-btn">Generate Weekly Sales Report</button>
@@ -168,7 +168,6 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
 
       {isManagerView && (
         <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="primary-btn" onClick={onAddRecord}>Add Allocation Request</button>
           <button type="button" className="primary-btn" onClick={onModifyRecord}>Modify Existing Records</button>
           <button type="button" className="ghost-btn">Post Stock Listing</button>
           <button type="button" className="ghost-btn">Export Inventory to CSV</button>
