@@ -8,32 +8,34 @@ function filterVisiblePosts(posts) {
   return Array.isArray(posts) ? posts.filter((post) => post?.status !== 'deleted') : [];
 }
 
-async function loadVisiblePostBatch(startOffset) {
+async function loadVisiblePostBatch(startOffset, filters) {
   let currentOffset = startOffset;
   let hasMore = true;
-  let visiblePosts = [];
+  const collectedPosts = [];
 
-  while (visiblePosts.length === 0 && hasMore) {
-    const data = await getPosts({ limit: PAGE_SIZE, offset: currentOffset });
+  while (collectedPosts.length < PAGE_SIZE && hasMore) {
+    const data = await getPosts({ limit: PAGE_SIZE, offset: currentOffset, ...filters });
     const rawPosts = Array.isArray(data?.posts) ? data.posts : [];
 
-    visiblePosts = filterVisiblePosts(rawPosts);
+    const newVisiblePosts = filterVisiblePosts(rawPosts);
+    collectedPosts.push(...newVisiblePosts);
+
     currentOffset += rawPosts.length;
     hasMore = Boolean(data?.hasMore);
 
-    if (rawPosts.length === 0) {
+    if (!hasMore || rawPosts.length === 0) {
       break;
     }
   }
 
   return {
-    posts: visiblePosts,
+    posts: collectedPosts,
     nextOffset: currentOffset,
     hasMore,
   };
 }
 
-export default function FeedGet() {
+export default function FeedGet({ filters }) {
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -45,8 +47,11 @@ export default function FeedGet() {
     let isActive = true;
 
     async function loadInitialPosts() {
+      setIsLoading(true);
+      setHasError(false);
+
       try {
-        const result = await loadVisiblePostBatch(0);
+        const result = await loadVisiblePostBatch(0, filters);
 
         if (!isActive) {
           return;
@@ -73,7 +78,7 @@ export default function FeedGet() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [filters]);
 
   if (isLoading) {
     return <div className="post-card">Loading posts...</div>;
@@ -87,7 +92,7 @@ export default function FeedGet() {
     setIsLoadingMore(true);
 
     try {
-      const result = await loadVisiblePostBatch(rawOffset);
+      const result = await loadVisiblePostBatch(rawOffset, filters);
 
       setPosts((currentPosts) => [...currentPosts, ...result.posts]);
       setRawOffset(result.nextOffset);

@@ -18,6 +18,7 @@ function buildUserRow(user) {
         id: user.id,
         fullName: user.full_name,
         email: user.email,
+        userType: user.user_type || 'basic',
     }
 }
 
@@ -38,7 +39,8 @@ function initializeDatabase(callback) {
                 full_name TEXT NOT NULL,
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                user_type TEXT NOT NULL DEFAULT 'basic'
             )`,
             (tableError) => {
                 if (tableError) {
@@ -153,9 +155,102 @@ function initializeDatabase(callback) {
                                                                                     process.exit(1)
                                                                                 }
 
-                                                                                if (typeof callback === 'function') {
-                                                                                    callback()
-                                                                                }
+                                                                                db.run(
+                                                                                    `CREATE TABLE IF NOT EXISTS rice_varieties (
+                                                                                        variety_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                                                        name TEXT NOT NULL,
+                                                                                        quality_grade TEXT NOT NULL
+                                                                                    )`,
+                                                                                    (riceVarietiesError) => {
+                                                                                        if (riceVarietiesError) {
+                                                                                            console.error('Failed to prepare rice_varieties table:', riceVarietiesError.message)
+                                                                                            process.exit(1)
+                                                                                        }
+
+                                                                                        db.run(
+                                                                                            `CREATE TABLE IF NOT EXISTS stock_listing (
+                                                                                                stock_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                                                                user_id INTEGER NOT NULL,
+                                                                                                variety_id INTEGER NOT NULL,
+                                                                                                physical_sacks INTEGER DEFAULT 0 CHECK (physical_sacks >= 0),
+                                                                                                allocated_sacks INTEGER DEFAULT 0 CHECK (allocated_sacks >= 0),
+                                                                                                wholesale_price REAL DEFAULT 0.0,
+                                                                                                last_updated TEXT DEFAULT (datetime('now', 'localtime')),
+                                                                                                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                                                                                                FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id),
+                                                                                                UNIQUE (user_id, variety_id) 
+                                                                                            )`,
+                                                                                            (stockListingError) => {
+                                                                                                if (stockListingError) {
+                                                                                                    console.error('Failed to prepare stock_listing table:', stockListingError.message)
+                                                                                                    process.exit(1)
+                                                                                                }
+
+                                                                                                db.run(
+                                                                                                    `CREATE TABLE IF NOT EXISTS production_batches (
+                                                                                                        batch_id TEXT NOT NULL,
+                                                                                                        user_id INTEGER NOT NULL,
+                                                                                                        variety_id INTEGER NOT NULL,
+                                                                                                        current_stage TEXT NOT NULL,
+                                                                                                        est_yield_sacks INTEGER NOT NULL,
+                                                                                                        actual_yield_sacks INTEGER,
+                                                                                                        PRIMARY KEY (batch_id, user_id), 
+                                                                                                        FOREIGN KEY (user_id) REFERENCES users(id),
+                                                                                                        FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id)
+                                                                                                    )`,
+                                                                                                    (productionBatchesError) => {
+                                                                                                        if (productionBatchesError) {
+                                                                                                            console.error('Failed to prepare production_batches table:', productionBatchesError.message)
+                                                                                                            process.exit(1)
+                                                                                                        }
+
+                                                                                                        db.run(
+                                                                                                            `CREATE TABLE IF NOT EXISTS order_rfqs (
+                                                                                                                order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                                                                                user_id INTEGER NOT NULL,
+                                                                                                                variety_id INTEGER NOT NULL,
+                                                                                                                requested_sacks INTEGER NOT NULL,
+                                                                                                                status TEXT NOT NULL DEFAULT 'Pending',
+                                                                                                                FOREIGN KEY (user_id) REFERENCES users(id),
+                                                                                                                FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id)
+                                                                                                            )`,
+                                                                                                            (orderRfqsError) => {
+                                                                                                                if (orderRfqsError) {
+                                                                                                                    console.error('Failed to prepare order_rfqs table:', orderRfqsError.message)
+                                                                                                                    process.exit(1)
+                                                                                                                }
+
+                                                                                                                db.run(
+                                                                                                                    `CREATE TABLE IF NOT EXISTS inventory_logs (
+                                                                                                                        log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                                                                                        user_id INTEGER NOT NULL,
+                                                                                                                        variety_id INTEGER NOT NULL,
+                                                                                                                        transaction_type TEXT NOT NULL,
+                                                                                                                        quantity_change INTEGER NOT NULL,
+                                                                                                                        reference_id TEXT NOT NULL,
+                                                                                                                        timestamp TEXT DEFAULT (datetime('now', 'localtime')),
+                                                                                                                        FOREIGN KEY (user_id) REFERENCES users(id),
+                                                                                                                        FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id)
+                                                                                                                    )`,
+                                                                                                                    (inventoryLogsError) => {
+                                                                                                                        if (inventoryLogsError) {
+                                                                                                                            console.error('Failed to prepare inventory_logs table:', inventoryLogsError.message)
+                                                                                                                            process.exit(1)
+                                                                                                                        }
+
+                                                                                                                        if (typeof callback === 'function') {
+                                                                                                                            callback()
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                )
+                                                                                                            }
+                                                                                                        )
+                                                                                                    }
+                                                                                                )
+                                                                                            }
+                                                                                        )
+                                                                                    }
+                                                                                )
                                                                             }
                                                                         )
                                                                     }

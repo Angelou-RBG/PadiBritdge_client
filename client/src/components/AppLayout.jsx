@@ -1,7 +1,9 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import '../pages/Feed.css';
+import { useFilters } from '../context/FilterContext';
 import { useAuth } from '../context/AuthContext';
+import SearchFilter from './SearchFilter';
 
 function navClass({ isActive }) {
   return isActive ? 'nav-link active' : 'nav-link';
@@ -12,6 +14,7 @@ export default function AppLayout() {
   const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
   const isFeedShell = /^\/(feed|create)$/.test(location.pathname) || /^\/(post|edit|read)\/[^/]+$/.test(location.pathname);
+  const { setFilters } = useFilters();
 
   const profileId = user?.id || user?._id || 'me';
 
@@ -81,6 +84,7 @@ export default function AppLayout() {
             </section>
 
             <aside className="modules scrollable-col">
+              {location.pathname === '/feed' && <SearchFilter onFilterChange={setFilters} />}
               <div className="module-box">Module</div>
               <div className="module-box">Module</div>
               <div className="module-box">Module</div>

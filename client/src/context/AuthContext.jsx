@@ -76,6 +76,7 @@ export function AuthProvider({ children }) {
     () => ({
       user: authState.user,
       token: authState.token,
+      userType: authState.user?.userType || 'basic',
       isReady: authState.ready,
       isAuthenticated: Boolean(authState.token),
       login,

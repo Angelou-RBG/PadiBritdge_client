@@ -104,6 +104,7 @@ app.post('/api/auth/signup', (request, response) => {
                             id: this.lastID,
                             fullName: normalizedFullName,
                             email: normalizedEmail,
+                            userType: 'basic',
                         },
                     })
                 }
@@ -123,7 +124,7 @@ app.post('/api/auth/login', (request, response) => {
     const passwordHash = hashPassword(String(password))
 
     db.get(
-        'SELECT id, full_name, email FROM users WHERE email = ? AND password_hash = ?',
+        'SELECT id, full_name, email, user_type FROM users WHERE email = ? AND password_hash = ?',
         [normalizedEmail, passwordHash],
         (error, user) => {
             if (error) {
@@ -310,12 +311,42 @@ function insertPostImages(postId, files, callback) {
 }
 
 app.get('/api/posts', (request, response) => {
-    const limit = Math.min(Math.max(Number(request.query.limit) || 15, 1), 50)
-    const offset = Math.max(Number(request.query.offset) || 0, 0)
+    const { limit: qLimit, offset: qOffset, postType, tags, startDate, endDate } = request.query
+
+    const limit = Math.min(Math.max(Number(qLimit) || 15, 1), 50)
+    const offset = Math.max(Number(qOffset) || 0, 0)
     const fetchLimit = limit + 1
 
-    db.all(
-        `SELECT
+    const whereClauses = ["posts.status <> 'deleted'"]
+    const queryParams = []
+
+    if (postType) {
+        whereClauses.push('posts.post_type = ?')
+        queryParams.push(postType)
+    }
+
+    if (tags) {
+        const tagList = String(tags).split(',').filter(Boolean)
+        if (tagList.length > 0) {
+            const tagWhere = tagList.map(() => `(',' || REPLACE(posts.tags, ', ', ',') || ',' LIKE ?)`).join(' OR ')
+            whereClauses.push(`(${tagWhere})`)
+            tagList.forEach(tag => queryParams.push(`%,${tag},%`))
+        }
+    }
+
+    if (startDate) {
+        whereClauses.push('DATE(posts.date_created) >= DATE(?)')
+        queryParams.push(startDate)
+    }
+
+    if (endDate) {
+        whereClauses.push('DATE(posts.date_created) <= DATE(?)')
+        queryParams.push(endDate)
+    }
+
+    const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''
+
+    const sql = `SELECT
             posts.post_id,
             posts.user_id,
             posts.title,
@@ -327,27 +358,29 @@ app.get('/api/posts', (request, response) => {
             users.full_name
          FROM posts
          INNER JOIN users ON users.id = posts.user_id
+         ${whereString}
          ORDER BY posts.date_created DESC, posts.post_id DESC
-         LIMIT ? OFFSET ?`,
-        [fetchLimit, offset],
-        (error, rows) => {
-            if (error) {
-                return sendDatabaseError(response, error)
+         LIMIT ? OFFSET ?`
+
+    const finalParams = [...queryParams, fetchLimit, offset]
+
+    db.all(sql, finalParams, (error, rows) => {
+        if (error) {
+            return sendDatabaseError(response, error)
+        }
+
+        const safeRows = Array.isArray(rows) ? rows : []
+        const hasMore = safeRows.length > limit
+        const limitedRows = safeRows.slice(0, limit)
+
+        return loadPostImages(limitedRows, (imagesError, posts) => {
+            if (imagesError) {
+                return sendDatabaseError(response, imagesError)
             }
 
-            const safeRows = Array.isArray(rows) ? rows : []
-            const hasMore = safeRows.length > limit
-            const limitedRows = safeRows.slice(0, limit)
-
-            return loadPostImages(limitedRows, (imagesError, posts) => {
-                if (imagesError) {
-                    return sendDatabaseError(response, imagesError)
-                }
-
-                return response.json({ posts, hasMore })
-            })
-        }
-    )
+            return response.json({ posts, hasMore })
+        })
+    })
 })
 
 app.get('/api/posts/:id', (request, response) => {
@@ -831,6 +864,27 @@ app.post('/api/posts', (request, response) => {
             }
         )
     })
+})
+
+app.get('/api/stock-listings', (request, response) => {
+    db.all(
+        `SELECT
+            sl.stock_id,
+            sl.allocated_sacks,
+            sl.wholesale_price,
+            rv.name,
+            rv.quality_grade
+         FROM stock_listing sl
+         INNER JOIN rice_varieties rv ON sl.variety_id = rv.variety_id
+         ORDER BY sl.last_updated DESC`,
+        (error, rows) => {
+            if (error) {
+                return sendDatabaseError(response, error)
+            }
+
+            return response.json({ stockListings: rows || [] })
+        }
+    )
 })
 
 app.get('/api/posts/latest', (request, response) => {

@@ -80,7 +80,7 @@
 .text-card-input { background-color: var(--bg-btn-green); color: var(--text-dark); border-radius:8px; flex-grow:1; padding:12px; text-align:center; }
 .post-card { background-color: var(--card-color); border-radius:12px; min-height:160px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; font-size:1rem; color:var(--text-dark); margin-bottom:16px; padding:18px; gap: 14px; }
 .post-card-header { display:flex; flex-direction:column; gap: 10px; }
-.post-card-title { margin:0; font-size: 1.15rem; font-weight: 800; color: var(--text-dark); }
+.post-card-title { margin:0; font-size: 1.45rem; font-weight: 800; color: var(--text-dark); }
 .post-card-user { margin:0; color: var(--text-muted-green); font-size: 0.92rem; }
 .post-card-tags { display:flex; flex-wrap:wrap; gap: 8px; }
 .post-card-tag { display:inline-flex; align-items:center; border-radius:999px; background: var(--tag-bg, #dce7dc); color: var(--tag-text, var(--text-dark)); font-size:0.8rem; font-weight:600; padding: 4px 10px; }
@@ -94,6 +94,39 @@
 /* Right modules */
 .modules { background-color: var(--bg-light-green); flex: 0 0 320px; padding: 20px; display:flex; flex-direction:column; }
 .module-box { background:#fff; border:2px dashed var(--border-dashed-purple); border-radius:8px; min-height:120px; display:flex; align-items:center; justify-content:center; color:#9ba3bc; margin-bottom:16px; }
+.search-module {
+  background: #fff;
+  border: 1px solid #d8e1d8;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+  color: var(--text-dark);
+}
+.search-module h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.1rem;
+}
+.search-module select, .search-module input {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 6px;
+}
+.search-module button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+.search-module button[type="submit"] {
+  background-color: var(--bg-btn-green);
+  color: var(--text-dark);
+}
+.search-module button[type="button"] {
+  background-color: #e7e9ef;
+  color: var(--text-dark);
+}
 
 @media (max-width: 900px) {
   .feed-container { flex-direction: column; height: auto; }

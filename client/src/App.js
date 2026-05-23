@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './App.css';
 import AppLayout from './components/AppLayout';
 import ProtectedRoute from './components/ProtectedRoute';
+import { FilterProvider } from './context/FilterContext';
 import { AuthProvider } from './context/AuthContext';
 import Create from './pages/Create';
 import Edit from './pages/Edit';
@@ -17,26 +18,28 @@ import Signup from './pages/Signup';
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<AppLayout />}>
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
+      <FilterProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
 
-            <Route element={<ProtectedRoute />}>
-              <Route path="/feed" element={<Feed />} />
-              <Route path="/profile/:userId" element={<Profile />} />
-              <Route path="/create" element={<Create />} />
-              <Route path="/edit/:id" element={<Edit />} />
-              <Route path="/post/:id" element={<Post />} />
-              <Route path="/read/:id" element={<Read />} />
+              <Route element={<ProtectedRoute />}>
+                <Route path="/feed" element={<Feed />} />
+                <Route path="/profile/:userId" element={<Profile />} />
+                <Route path="/create" element={<Create />} />
+                <Route path="/edit/:id" element={<Edit />} />
+                <Route path="/post/:id" element={<Post />} />
+                <Route path="/read/:id" element={<Read />} />
+              </Route>
+
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
-
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+          </Routes>
+        </BrowserRouter>
+      </FilterProvider>
     </AuthProvider>
   );
 }
