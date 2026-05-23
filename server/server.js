@@ -143,6 +143,53 @@ app.post('/api/auth/login', (request, response) => {
     )
 })
 
+app.put('/api/users/:id', (request, response) => {
+    const userId = Number(request.params.id)
+    const { fullName, email } = request.body || {}
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+        return response.status(400).json({ message: 'Valid user id is required.' })
+    }
+
+    const normalizedEmail = String(email || '').trim().toLowerCase()
+    const normalizedFullName = String(fullName || '').trim()
+
+    if (!normalizedEmail || !normalizedFullName) {
+        return response.status(400).json({ message: 'Full name and email are required.' })
+    }
+
+    db.get(
+        'SELECT id FROM users WHERE email = ? AND id != ?',
+        [normalizedEmail, userId],
+        (error, existingUser) => {
+            if (error) {
+                return sendDatabaseError(response, error)
+            }
+
+            if (existingUser) {
+                return response.status(409).json({ message: 'Email is already in use by another account.' })
+            }
+
+            db.run(
+                'UPDATE users SET full_name = ?, email = ? WHERE id = ?',
+                [normalizedFullName, normalizedEmail, userId],
+                (updateError) => {
+                    if (updateError) {
+                        return sendDatabaseError(response, updateError)
+                    }
+
+                    db.get('SELECT id, full_name, email, user_type FROM users WHERE id = ?', [userId], (fetchError, updatedUser) => {
+                        if (fetchError) {
+                            return sendDatabaseError(response, fetchError)
+                        }
+                        return response.json({ user: buildUserRow(updatedUser) })
+                    })
+                }
+            )
+        }
+    )
+})
+
 app.get('/api/post-types', (request, response) => {
     db.all(
         'SELECT id, name FROM post_types ORDER BY name ASC',
@@ -867,16 +914,29 @@ app.post('/api/posts', (request, response) => {
 })
 
 app.get('/api/stock-listings', (request, response) => {
-    db.all(
-        `SELECT
+    const { userId } = request.query
+    let sql = `SELECT
             sl.stock_id,
+            sl.user_id,
+            sl.physical_sacks,
             sl.allocated_sacks,
             sl.wholesale_price,
             rv.name,
             rv.quality_grade
          FROM stock_listing sl
-         INNER JOIN rice_varieties rv ON sl.variety_id = rv.variety_id
-         ORDER BY sl.last_updated DESC`,
+         INNER JOIN rice_varieties rv ON sl.variety_id = rv.variety_id`
+    const params = []
+    
+    if (userId) {
+        sql += ` WHERE sl.user_id = ?`
+        params.push(Number(userId))
+    }
+    
+    sql += ` ORDER BY sl.last_updated DESC`
+
+    db.all(
+        sql,
+        params,
         (error, rows) => {
             if (error) {
                 return sendDatabaseError(response, error)
@@ -885,6 +945,304 @@ app.get('/api/stock-listings', (request, response) => {
             return response.json({ stockListings: rows || [] })
         }
     )
+})
+
+app.put('/api/stock-listings/:id', (request, response) => {
+    const stockId = Number(request.params.id)
+    const { userId, physicalSacks, allocatedSacks, wholesalePrice, referenceId } = request.body || {}
+
+    if (!Number.isInteger(stockId) || stockId <= 0) {
+        return response.status(400).json({ message: 'Valid stock id is required.' })
+    }
+
+    if (!userId) {
+        return response.status(400).json({ message: 'User ID is required.' })
+    }
+
+    const newPhysical = Number(physicalSacks)
+    const newAllocated = Number(allocatedSacks)
+    const newPrice = Number(wholesalePrice)
+
+    if (!Number.isInteger(newPhysical) || newPhysical < 0 || !Number.isInteger(newAllocated) || newAllocated < 0 || isNaN(newPrice) || newPrice < 0) {
+        return response.status(400).json({ message: 'Invalid stock values provided.' })
+    }
+
+    db.get('SELECT * FROM stock_listing WHERE stock_id = ? AND user_id = ?', [stockId, userId], (error, currentStock) => {
+        if (error) return sendDatabaseError(response, error)
+        if (!currentStock) return response.status(404).json({ message: 'Stock listing not found or unauthorized.' })
+
+        const physicalChange = newPhysical - currentStock.physical_sacks
+
+        db.run('BEGIN TRANSACTION', (beginError) => {
+            if (beginError) return sendDatabaseError(response, beginError)
+
+            const updateStock = () => {
+                db.run(
+                    `UPDATE stock_listing 
+                     SET physical_sacks = ?, allocated_sacks = ?, wholesale_price = ?, last_updated = datetime('now', 'localtime') 
+                     WHERE stock_id = ?`,
+                    [newPhysical, newAllocated, newPrice, stockId],
+                    (updateError) => {
+                        if (updateError) return db.run('ROLLBACK', () => sendDatabaseError(response, updateError))
+                        db.run('COMMIT', (commitError) => {
+                            if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                            return response.json({ message: 'Stock updated successfully.' })
+                        })
+                    }
+                )
+            }
+
+            if (physicalChange !== 0) {
+                db.run(
+                    `INSERT INTO inventory_logs (user_id, variety_id, transaction_type, quantity_change, reference_id) VALUES (?, ?, ?, ?, ?)`,
+                    [userId, currentStock.variety_id, 'MANUAL_CORRECTION', physicalChange, referenceId || 'MODIFICATION'],
+                    (insertError) => {
+                        if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
+                        updateStock()
+                    }
+                )
+            } else {
+                updateStock()
+            }
+        })
+    })
+})
+
+app.get('/api/rice-varieties', (request, response) => {
+    db.all(
+        'SELECT variety_id, name, quality_grade FROM rice_varieties ORDER BY name ASC',
+        (error, rows) => {
+            if (error) {
+                return sendDatabaseError(response, error)
+            }
+            return response.json({ riceVarieties: rows || [] })
+        }
+    )
+})
+
+app.get('/api/transaction-types', (request, response) => {
+    db.all(
+        `SELECT type_name, category, quantity_direction, description FROM transaction_types ORDER BY category ASC, type_name ASC`,
+        (error, rows) => {
+            if (error) {
+                return sendDatabaseError(response, error)
+            }
+
+            return response.json({ transactionTypes: rows || [] })
+        }
+    )
+})
+
+app.get('/api/inventory-logs', (request, response) => {
+    const { userId } = request.query
+    
+    let sql = `
+        SELECT 
+            il.log_id,
+            il.user_id,
+            il.variety_id,
+            il.transaction_type,
+            il.quantity_change,
+            il.reference_id,
+            il.timestamp,
+            rv.name AS variety_name,
+            rv.quality_grade,
+            tt.category,
+            tt.quantity_direction
+        FROM inventory_logs il
+        LEFT JOIN rice_varieties rv ON il.variety_id = rv.variety_id
+        LEFT JOIN transaction_types tt ON il.transaction_type = tt.type_name
+    `
+    
+    const params = []
+    if (userId) {
+        sql += ` WHERE il.user_id = ?`
+        params.push(Number(userId))
+    }
+    
+    sql += ` ORDER BY il.timestamp DESC`
+
+    db.all(sql, params, (error, rows) => {
+        if (error) {
+            return sendDatabaseError(response, error)
+        }
+        return response.json({ inventoryLogs: rows || [] })
+    })
+})
+
+app.get('/api/inventory-logs/:id', (request, response) => {
+    const logId = Number(request.params.id)
+
+    if (!Number.isInteger(logId) || logId <= 0) {
+        return response.status(400).json({ message: 'Valid log id is required.' })
+    }
+
+    db.get(
+        `SELECT 
+            il.log_id,
+            il.user_id,
+            il.variety_id,
+            il.transaction_type,
+            il.quantity_change,
+            il.reference_id,
+            il.timestamp,
+            rv.name AS variety_name,
+            rv.quality_grade,
+            tt.category,
+            tt.quantity_direction
+        FROM inventory_logs il
+        LEFT JOIN rice_varieties rv ON il.variety_id = rv.variety_id
+        LEFT JOIN transaction_types tt ON il.transaction_type = tt.type_name
+        WHERE il.log_id = ?`,
+        [logId],
+        (error, row) => {
+            if (error) {
+                return sendDatabaseError(response, error)
+            }
+            if (!row) {
+                return response.status(404).json({ message: 'Inventory log not found.' })
+            }
+            return response.json({ inventoryLog: row })
+        }
+    )
+})
+
+app.post('/api/inventory-logs', (request, response) => {
+    const { userId, varietyId, transactionType, quantityChange, referenceId } = request.body || {}
+
+    if (!userId || !varietyId || !transactionType || quantityChange === undefined) {
+        return response.status(400).json({ message: 'Missing required fields for inventory log.' })
+    }
+
+    const inputChange = Number(quantityChange)
+    if (!Number.isInteger(inputChange)) {
+        return response.status(400).json({ message: 'Quantity change must be an integer.' })
+    }
+
+    db.get('SELECT quantity_direction FROM transaction_types WHERE type_name = ?', [transactionType], (typeError, typeRow) => {
+        if (typeError) return sendDatabaseError(response, typeError)
+        if (!typeRow) return response.status(400).json({ message: 'Invalid transaction type.' })
+
+        let actualChange = inputChange
+        if (typeRow.quantity_direction === 'Negative (-)') {
+            actualChange = -Math.abs(inputChange)
+        } else if (typeRow.quantity_direction === 'Positive (+)') {
+            actualChange = Math.abs(inputChange)
+        }
+
+        db.run('BEGIN TRANSACTION', (beginError) => {
+            if (beginError) return sendDatabaseError(response, beginError)
+
+            db.run(
+                `INSERT INTO inventory_logs (user_id, variety_id, transaction_type, quantity_change, reference_id) VALUES (?, ?, ?, ?, ?)`,
+                [userId, varietyId, transactionType, actualChange, referenceId || ''],
+                function (insertError) {
+                    if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
+                    const logId = this.lastID
+
+                    db.run(
+                        `INSERT INTO stock_listing (user_id, variety_id, physical_sacks, allocated_sacks, wholesale_price)
+                         VALUES (?, ?, MAX(0, ?), 0, 0.0)
+                         ON CONFLICT(user_id, variety_id) DO UPDATE SET
+                         physical_sacks = MAX(0, physical_sacks + ?), last_updated = datetime('now', 'localtime')`,
+                        [userId, varietyId, actualChange, actualChange],
+                        (upsertError) => {
+                            if (upsertError) return db.run('ROLLBACK', () => sendDatabaseError(response, upsertError))
+                            db.run('COMMIT', (commitError) => {
+                                if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                                return response.status(201).json({ logId })
+                            })
+                        }
+                    )
+                }
+            )
+        })
+    })
+})
+
+app.post('/api/order-rfqs', (request, response) => {
+    const { buyerId, millerId, varietyId, requestedSacks } = request.body || {}
+
+    if (!buyerId || !millerId || !varietyId || requestedSacks === undefined) {
+        return response.status(400).json({ message: 'Missing required fields for allocation request.' })
+    }
+
+    const sacks = Number(requestedSacks)
+    if (!Number.isInteger(sacks) || sacks <= 0) {
+        return response.status(400).json({ message: 'Requested sacks must be a positive integer.' })
+    }
+
+    db.run(
+        `INSERT INTO order_rfqs (buyer_id, miller_id, variety_id, requested_sacks, status) VALUES (?, ?, ?, ?, 'Pending')`,
+        [buyerId, millerId, varietyId, sacks],
+        function (insertError) {
+            if (insertError) return sendDatabaseError(response, insertError)
+            return response.status(201).json({ orderId: this.lastID })
+        }
+    )
+})
+
+app.get('/api/order-rfqs', (request, response) => {
+    const { buyerId, millerId } = request.query
+    let sql = `SELECT o.*, rv.name AS variety_name, rv.quality_grade FROM order_rfqs o LEFT JOIN rice_varieties rv ON o.variety_id = rv.variety_id WHERE 1=1`
+    const params = []
+    if (buyerId) { sql += ` AND o.buyer_id = ?`; params.push(Number(buyerId)) }
+    if (millerId) { sql += ` AND o.miller_id = ?`; params.push(Number(millerId)) }
+    sql += ` ORDER BY o.order_id DESC`
+    db.all(sql, params, (error, rows) => {
+        if (error) return sendDatabaseError(response, error)
+        return response.json({ orderRfqs: rows || [] })
+    })
+})
+
+app.put('/api/order-rfqs/:id', (request, response) => {
+    const { status } = request.body || {}
+    db.run(`UPDATE order_rfqs SET status = ? WHERE order_id = ?`, [status || 'Pending', Number(request.params.id)], (error) => {
+        if (error) return sendDatabaseError(response, error)
+        return response.json({ message: 'Order status updated successfully.' })
+    })
+})
+
+app.post('/api/external-rfqs', (request, response) => {
+    const { buyerName, millerId, varietyId, requestedSacks } = request.body || {}
+
+    if (!buyerName || !millerId || !varietyId || requestedSacks === undefined) {
+        return response.status(400).json({ message: 'Missing required fields for external allocation request.' })
+    }
+
+    const sacks = Number(requestedSacks)
+    if (!Number.isInteger(sacks) || sacks <= 0) {
+        return response.status(400).json({ message: 'Requested sacks must be a positive integer.' })
+    }
+
+    db.run(
+        `INSERT INTO external_rfqs (buyer_name, miller_id, variety_id, requested_sacks, status) VALUES (?, ?, ?, ?, 'Pending')`,
+        [buyerName, millerId, varietyId, sacks],
+        function (insertError) {
+            if (insertError) return sendDatabaseError(response, insertError)
+            return response.status(201).json({ orderId: this.lastID })
+        }
+    )
+})
+
+app.get('/api/external-rfqs', (request, response) => {
+    const { millerId } = request.query
+    let sql = `SELECT e.*, rv.name AS variety_name, rv.quality_grade FROM external_rfqs e LEFT JOIN rice_varieties rv ON e.variety_id = rv.variety_id WHERE 1=1`
+    const params = []
+    if (millerId) { sql += ` AND e.miller_id = ?`; params.push(Number(millerId)) }
+    sql += ` ORDER BY e.order_id DESC`
+    db.all(sql, params, (error, rows) => {
+        if (error) return sendDatabaseError(response, error)
+        return response.json({ externalRfqs: rows || [] })
+    })
+})
+
+app.put('/api/external-rfqs/:id', (request, response) => {
+    const { status } = request.body || {}
+    db.run(`UPDATE external_rfqs SET status = ? WHERE order_id = ?`, [status || 'Pending', Number(request.params.id)], (error) => {
+        if (error) return sendDatabaseError(response, error)
+        return response.json({ message: 'External order status updated successfully.' })
+    })
 })
 
 app.get('/api/posts/latest', (request, response) => {

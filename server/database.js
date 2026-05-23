@@ -7,6 +7,9 @@ const databasePath = process.env.DB_PATH || path.join(__dirname, 'db', 'PadiBrid
 const uploadsDir = path.join(__dirname, 'uploads')
 const db = new sqlite3.Database(databasePath)
 
+// Wait up to 5 seconds if the database is temporarily locked by another process
+db.configure('busyTimeout', 5000)
+
 fs.mkdirSync(uploadsDir, { recursive: true })
 
 function hashPassword(password) {
@@ -207,11 +210,13 @@ function initializeDatabase(callback) {
                                                                                                         db.run(
                                                                                                             `CREATE TABLE IF NOT EXISTS order_rfqs (
                                                                                                                 order_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                                                                                user_id INTEGER NOT NULL,
+                                                                                                                buyer_id INTEGER NOT NULL,
+                                                                                                                miller_id INTEGER NOT NULL,
                                                                                                                 variety_id INTEGER NOT NULL,
                                                                                                                 requested_sacks INTEGER NOT NULL,
                                                                                                                 status TEXT NOT NULL DEFAULT 'Pending',
-                                                                                                                FOREIGN KEY (user_id) REFERENCES users(id),
+                                                                                                                FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE,
+                                                                                                                FOREIGN KEY (miller_id) REFERENCES users(id) ON DELETE CASCADE,
                                                                                                                 FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id)
                                                                                                             )`,
                                                                                                             (orderRfqsError) => {
@@ -219,6 +224,23 @@ function initializeDatabase(callback) {
                                                                                                                     console.error('Failed to prepare order_rfqs table:', orderRfqsError.message)
                                                                                                                     process.exit(1)
                                                                                                                 }
+
+                                                                                                                db.run(
+                                                                                                                    `CREATE TABLE IF NOT EXISTS external_rfqs (
+                                                                                                                        order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                                                                                        buyer_name TEXT NOT NULL,
+                                                                                                                        miller_id INTEGER NOT NULL,
+                                                                                                                        variety_id INTEGER NOT NULL,
+                                                                                                                        requested_sacks INTEGER NOT NULL,
+                                                                                                                        status TEXT NOT NULL DEFAULT 'Pending',
+                                                                                                                        FOREIGN KEY (miller_id) REFERENCES users(id) ON DELETE CASCADE,
+                                                                                                                        FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id)
+                                                                                                                    )`,
+                                                                                                                    (externalRfqsError) => {
+                                                                                                                        if (externalRfqsError) {
+                                                                                                                            console.error('Failed to prepare external_rfqs table:', externalRfqsError.message)
+                                                                                                                            process.exit(1)
+                                                                                                                        }
 
                                                                                                                 db.run(
                                                                                                                     `CREATE TABLE IF NOT EXISTS inventory_logs (
@@ -237,10 +259,44 @@ function initializeDatabase(callback) {
                                                                                                                             console.error('Failed to prepare inventory_logs table:', inventoryLogsError.message)
                                                                                                                             process.exit(1)
                                                                                                                         }
+                                                                                        
+                                                                                        db.run(
+                                                                                            `CREATE TABLE IF NOT EXISTS transaction_types (
+                                                                                                type_name TEXT NOT NULL UNIQUE,
+                                                                                                category TEXT NOT NULL CHECK(category IN ('Inbound', 'Outbound', 'Adjustment')),
+                                                                                                quantity_direction TEXT NOT NULL CHECK(quantity_direction IN ('Positive (+)', 'Negative (-)', 'Both (+/-)')),
+                                                                                                description TEXT,
+                                                                                                PRIMARY KEY(type_name)
+                                                                                            )`,
+                                                                                            (transactionTypesError) => {
+                                                                                                if (transactionTypesError) {
+                                                                                                    console.error('Failed to prepare transaction_types table:', transactionTypesError.message)
+                                                                                                    process.exit(1)
+                                                                                                }
 
-                                                                                                                        if (typeof callback === 'function') {
-                                                                                                                            callback()
-                                                                                                                        }
+                                                                                                db.run(
+                                                                                                    `INSERT OR IGNORE INTO transaction_types (type_name, category, quantity_direction, description) VALUES
+                                                                                                    ('RESTOCK', 'Inbound', 'Positive (+)', 'Receiving fresh rice inventory from external suppliers or wholesale distributors.'),
+                                                                                                    ('PRODUCTION', 'Inbound', 'Positive (+)', 'When a raw harvest finishes processing in your mill and becomes commercial sacks.'),
+                                                                                                    ('CUSTOMER_RETURN', 'Inbound', 'Positive (+)', 'Cancelled orders or rejected stock that is physically returned to shelf inventory.'),
+                                                                                                    ('SALE', 'Outbound', 'Negative (-)', 'Standard depletion of stock triggered by a customer purchase or order fulfillment.'),
+                                                                                                    ('ALLOCATION_REMOVAL', 'Outbound', 'Negative (-)', 'Deducting directly from physical stock to fulfill a specific pre-committed obligation.'),
+                                                                                                    ('WASTAGE', 'Outbound', 'Negative (-)', 'Writing off inventory due to spoilage, water damage, pest infestation, or broken sacks.'),
+                                                                                                    ('MANUAL_CORRECTION', 'Adjustment', 'Both (+/-)', 'Realigning the database count with a real-world physical count during a warehouse audit.')`,
+                                                                                                    (insertError) => {
+                                                                                                        if (insertError) {
+                                                                                                            console.error('Failed to insert default transaction types:', insertError.message)
+                                                                                                        }
+
+                                                                                                        if (typeof callback === 'function') {
+                                                                                                            callback()
+                                                                                                        }
+                                                                                                    }
+                                                                                                )
+                                                                                            }
+                                                                                        )
+                                                                                                                    }
+                                                                                                                )
                                                                                                                     }
                                                                                                                 )
                                                                                                             }

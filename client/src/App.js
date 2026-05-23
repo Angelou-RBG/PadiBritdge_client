@@ -7,6 +7,7 @@ import { FilterProvider } from './context/FilterContext';
 import { AuthProvider } from './context/AuthContext';
 import Create from './pages/Create';
 import Edit from './pages/Edit';
+import EditProfile from './pages/EditProfile';
 import Feed from './pages/Feed';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -14,6 +15,7 @@ import Post from './pages/Post';
 import Profile from './pages/Profile';
 import Read from './pages/Read';
 import Signup from './pages/Signup';
+import StockManager from './pages/StockManager';
 
 function App() {
   return (
@@ -30,6 +32,8 @@ function App() {
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/create" element={<Create />} />
+                <Route path="/edit-profile" element={<EditProfile />} />
+                <Route path="/stock-manager" element={<StockManager />} />
                 <Route path="/edit/:id" element={<Edit />} />
                 <Route path="/post/:id" element={<Post />} />
                 <Route path="/read/:id" element={<Read />} />

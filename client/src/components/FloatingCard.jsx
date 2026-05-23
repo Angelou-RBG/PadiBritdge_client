@@ -30,7 +30,7 @@ export default function FloatingCard({
   }
 
   return (
-    <div className="floating-card-backdrop" role="presentation" onClick={onClose}>
+    <div className="floating-card-backdrop" role="presentation" style={{ userSelect: 'none' }}>
       <section
         className="floating-card"
         role="dialog"

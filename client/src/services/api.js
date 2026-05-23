@@ -174,6 +174,32 @@ export async function deleteOrderRfq(id) {
   return response.data;
 }
 
+// External RFQs
+export async function getExternalRfqs(params) {
+  const response = await api.get('/api/external-rfqs', { params });
+  return response.data;
+}
+
+export async function getExternalRfq(id) {
+  const response = await api.get(`/api/external-rfqs/${id}`);
+  return response.data;
+}
+
+export async function createExternalRfq(payload) {
+  const response = await api.post('/api/external-rfqs', payload);
+  return response.data;
+}
+
+export async function updateExternalRfq(id, payload) {
+  const response = await api.put(`/api/external-rfqs/${id}`, payload);
+  return response.data;
+}
+
+export async function deleteExternalRfq(id) {
+  const response = await api.delete(`/api/external-rfqs/${id}`);
+  return response.data;
+}
+
 // Inventory Logs
 export async function getInventoryLogs(params) {
   const response = await api.get('/api/inventory-logs', { params });
@@ -187,6 +213,18 @@ export async function getInventoryLog(id) {
 
 export async function createInventoryLog(payload) {
   const response = await api.post('/api/inventory-logs', payload);
+  return response.data;
+}
+
+// User Profile
+export async function updateProfile(userId, payload) {
+  const response = await api.put(`/api/users/${userId}`, payload);
+  return response.data;
+}
+
+// Transaction Types
+export async function getTransactionTypes() {
+  const response = await api.get('/api/transaction-types');
   return response.data;
 }
 
