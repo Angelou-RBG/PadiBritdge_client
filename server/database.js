@@ -4,7 +4,7 @@ const crypto = require('crypto')
 const path = require('path')
 
 const databasePath = process.env.DB_PATH || path.join(__dirname, 'db', 'PadiBridge.db')
-const uploadsDir = path.join(__dirname, 'uploads')
+const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads')
 const db = new sqlite3.Database(databasePath)
 
 // Wait up to 5 seconds if the database is temporarily locked by another process

@@ -1,6 +1,15 @@
 import axios from 'axios';
 
-export const baseURL = process.env.REACT_APP_API_BASE_URL || '';
+const rawBaseURL = process.env.REACT_APP_API_BASE_URL?.trim() || '';
+
+export const baseURL = rawBaseURL.replace(/\/+$/, '');
+
+if (!baseURL && process.env.NODE_ENV === 'production') {
+  // Production builds need an explicit backend origin when the client is deployed separately.
+  // Leaving this empty makes requests target the client origin instead.
+  // eslint-disable-next-line no-console
+  console.warn('REACT_APP_API_BASE_URL is not set. Set it to the deployed backend URL before building the client.');
+}
 
 const api = axios.create({
   baseURL,

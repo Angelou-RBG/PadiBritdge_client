@@ -75,5 +75,7 @@ The app calls the backend through the axios client in `src/services/api.js`.
 
 - For local development, the CRA proxy in `package.json` will forward `/api/*` requests to `http://localhost:5000`.
 - For production or any non-proxied environment, set `REACT_APP_API_BASE_URL` to the full backend URL, for example `http://localhost:5000` during local testing or your deployed API URL in production.
+- Rebuild the client after changing `REACT_APP_API_BASE_URL`; CRA injects it at build time.
+- If the backend is on another origin, make sure the server allows the client origin in CORS.
 
 Copy `client/.env.example` to `.env` if you want to set the value explicitly.
