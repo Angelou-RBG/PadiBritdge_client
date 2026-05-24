@@ -5,6 +5,9 @@ import { updatePost, getPost, getPostTypes, getTags } from '../services/api';
 import { getTagStyle } from '../utils/tagTheme';
 import './Create.css';
 
+const MAX_IMAGE_COUNT = 5;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
 export default function Edit() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -22,6 +25,8 @@ export default function Edit() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
   const [attachmentType, setAttachmentType] = useState('none');
+  const [existingImages, setExistingImages] = useState([]);
+  const [selectedImages, setSelectedImages] = useState([]);
 
   useEffect(() => {
     let isActive = true;
@@ -97,6 +102,7 @@ export default function Edit() {
     setTitle(post.title || '');
     setTextBody(post.textBody || '');
     setAttachmentType(post.attachmentType || 'none');
+    setExistingImages(post.images || []);
 
     const matchedPostType = postTypes.find((option) => option.name === post.postType);
     setPostTypeId(matchedPostType ? String(matchedPostType.id) : '');
@@ -142,6 +148,34 @@ export default function Edit() {
     setSelectedTagIds((previousTagIds) => previousTagIds.filter((currentTagId) => currentTagId !== tagId));
   }
 
+  function handleImageChange(event) {
+    const nextFiles = Array.from(event.target.files || []);
+
+    if (nextFiles.length + existingImages.length + selectedImages.length > MAX_IMAGE_COUNT) {
+      event.target.value = '';
+      setNotification({ type: 'error', message: `You can upload up to ${MAX_IMAGE_COUNT} images in total.` });
+      return;
+    }
+
+    const invalidFile = nextFiles.find((file) => !file.type.startsWith('image/') || file.size > MAX_IMAGE_SIZE);
+
+    if (invalidFile) {
+      event.target.value = '';
+      setNotification({ type: 'error', message: 'Only images up to 5 MB are allowed.' });
+      return;
+    }
+
+    setSelectedImages((prev) => [...prev, ...nextFiles]);
+  }
+
+  function handleRemoveExistingImage(indexToRemove) {
+    setExistingImages((prev) => prev.filter((_, index) => index !== indexToRemove));
+  }
+
+  function handleRemoveSelectedImage(indexToRemove) {
+    setSelectedImages((prev) => prev.filter((_, index) => index !== indexToRemove));
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setNotification(null);
@@ -154,13 +188,19 @@ export default function Edit() {
     try {
       setIsSubmitting(true);
 
-      await updatePost(id, {
-        title: title.trim(),
-        postTypeId: String(postTypeId),
-        tagIds: JSON.stringify(selectedTagIds.map((tagId) => Number(tagId))),
-        textBody: textBody.trim(),
-        attachmentType,
+      const formData = new FormData();
+      formData.append('title', title.trim());
+      formData.append('postTypeId', String(postTypeId));
+      formData.append('tagIds', JSON.stringify(selectedTagIds.map((tagId) => Number(tagId))));
+      formData.append('textBody', textBody.trim());
+      formData.append('attachmentType', attachmentType);
+      formData.append('retainedImageIds', JSON.stringify(existingImages.map(img => img.id)));
+
+      selectedImages.forEach((file) => {
+        formData.append('images', file);
       });
+
+      await updatePost(id, formData);
 
       navigate(`/post/${id}`, {
         replace: true,
@@ -303,6 +343,48 @@ export default function Edit() {
             </label>
           </div>
         ) : null}
+
+        <label className="create-field">
+          <span className="create-label">Images</span>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageChange}
+            disabled={isLoadingLookups || isLoadingPost || isSubmitting}
+          />
+          <p className="create-image-hint">You can upload up to {MAX_IMAGE_COUNT} images, 5 MB each.</p>
+          {existingImages.length > 0 || selectedImages.length > 0 ? (
+            <div className="create-image-list" aria-label="Selected images">
+              {existingImages.map((image, index) => (
+                <div key={`existing-${image.id}`} className="create-image-item">
+                  <span>{image.originalName || `Image ${index + 1}`}</span>
+                  <button
+                    type="button"
+                    className="bean-chip-remove"
+                    onClick={() => handleRemoveExistingImage(index)}
+                    aria-label="Remove existing image"
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+              {selectedImages.map((file, index) => (
+                <div key={`new-${file.name}-${file.lastModified}`} className="create-image-item">
+                  <span>{file.name}</span>
+                  <button
+                    type="button"
+                    className="bean-chip-remove"
+                    onClick={() => handleRemoveSelectedImage(index)}
+                    aria-label={`Remove new image ${file.name}`}
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </label>
 
         <label className="create-field">
           <span className="create-label">Text Body</span>

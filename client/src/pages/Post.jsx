@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import CommentSection from '../components/CommentSection';
 import FloatingDropdown from '../components/FloatingDropdown';
 import DeletePostCard from '../components/DeletePostCard';
@@ -41,11 +41,12 @@ function formatImages(images) {
 
 export default function Post() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const { user } = useAuth();
   const [post, setPost] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [notification, setNotification] = useState(null);
+  const [notification, setNotification] = useState(location.state?.flash || null);
   const [isDeleteCardOpen, setIsDeleteCardOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [millerStocks, setMillerStocks] = useState([]);

@@ -95,7 +95,12 @@ export default function ReserveStock() {
         items,
         fulfillmentDeadline: fulfillmentDeadline || null
       });
-      navigate(-1);
+      navigate(`/post/${id}`, {
+        replace: true,
+        state: {
+          flash: { type: 'success', message: 'Allocation request successfully submitted.' }
+        }
+      });
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to submit allocation request.');
     } finally {
@@ -108,7 +113,7 @@ export default function ReserveStock() {
 
   return (
     <section className="page-shell card-shell">
-      <button type="button" className="ghost-btn" onClick={() => navigate(-1)} style={{ marginBottom: '1rem' }}>Back</button>
+      <button type="button" className="ghost-btn" onClick={() => navigate(`/post/${id}`)} style={{ marginBottom: '1rem' }}>Back</button>
       <h2 style={{ margin: '0 0 0.5rem 0' }}>{post?.user || 'Miller Name'}</h2>
       <h5 style={{ margin: '0 0 2rem 0', color: '#64748b' }}>Miller ID: {post?.user_id || post?.userId}</h5>
 

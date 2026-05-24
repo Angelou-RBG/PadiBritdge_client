@@ -13,7 +13,7 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
-  const isFeedShell = /^\/(feed|create|padi-manage|padi-manage-query)$/.test(location.pathname) || /^\/(post|edit|read)\/[^/]+$/.test(location.pathname);
+  const isFeedShell = /^\/(feed|create|padi-manage|padi-manage-query)$/.test(location.pathname) || /^\/(post|edit|read|reserve)\/[^/]+$/.test(location.pathname);
   const { setFilters } = useFilters();
   const isStockManagerPage = location.pathname === '/padi-manage';
   const isQueryPage = location.pathname === '/padi-manage-query';

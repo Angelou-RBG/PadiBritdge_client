@@ -17,6 +17,7 @@ import Read from './pages/Read';
 import PadiManage_Query from './pages/PadiManage_Query';
 import Signup from './pages/Signup';
 import PadiManage from './pages/PadiManage';
+import ReserveStock from './pages/ReserveStock';
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
                 <Route path="/edit/:id" element={<Edit />} />
                 <Route path="/post/:id" element={<Post />} />
                 <Route path="/read/:id" element={<Read />} />
+                <Route path="/reserve/:id" element={<ReserveStock />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

@@ -38,7 +38,10 @@ export async function deletePost(postId) {
 }
 
 export async function updatePost(postId, payload) {
-  const response = await api.put(`/api/posts/${postId}`, payload);
+  const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData;
+  const response = await api.put(`/api/posts/${postId}`, payload, isFormData
+    ? { headers: { 'Content-Type': 'multipart/form-data' } }
+    : undefined);
   return response.data;
 }
 
