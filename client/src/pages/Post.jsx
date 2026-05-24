@@ -7,6 +7,7 @@ import NotificationBean from '../components/NotificationBean';
 import { useAuth } from '../context/AuthContext';
 import { deletePost, getPost, getStockListings } from '../services/api';
 import { getTagStyle, normalizeTag } from '../utils/tagTheme';
+import MediaHandler from '../components/MediaHandler';
 import './Post.css';
 
 function formatTags(tags) {
@@ -249,13 +250,7 @@ export default function Post() {
 
       <div className="post-page-body">{post?.textBody || 'No post body available.'}</div>
 
-      {imageList.length > 0 ? (
-        <div className="post-page-images" aria-label="Post images">
-          {imageList.map((image) => (
-            <img key={image.id} className="post-page-image" src={image.url} alt={image.alt} loading="lazy" />
-          ))}
-        </div>
-      ) : null}
+      <MediaHandler images={imageList} />
 
       {isPadiConnect && post?.attachmentType === 'stock_listing' && millerStocks.length > 0 && (
         <div className="post-stock-table-container" style={{ marginTop: '1.5rem', marginBottom: '1.5rem' }}>

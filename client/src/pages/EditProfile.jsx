@@ -9,6 +9,7 @@ export default function EditProfile() {
   const { user, updateUser } = useAuth();
   
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -16,6 +17,7 @@ export default function EditProfile() {
   useEffect(() => {
     if (user) {
       setFullName(user.fullName || user.name || '');
+      setUsername(user.username || '');
       setEmail(user.email || '');
     }
   }, [user]);
@@ -24,8 +26,8 @@ export default function EditProfile() {
     event.preventDefault();
     setNotification(null);
 
-    if (!fullName.trim() || !email.trim()) {
-      setNotification({ type: 'error', message: 'Full name and email are required.' });
+    if (!fullName.trim() || !username.trim() || !email.trim()) {
+      setNotification({ type: 'error', message: 'Full name, username, and email are required.' });
       return;
     }
 
@@ -33,6 +35,7 @@ export default function EditProfile() {
       setIsSubmitting(true);
       const res = await updateProfile(user?.id || user?._id, {
         fullName: fullName.trim(),
+        username: username.trim(),
         email: email.trim(),
       });
 
@@ -81,6 +84,16 @@ export default function EditProfile() {
           value={fullName}
           onChange={(event) => setFullName(event.target.value)}
           placeholder="Enter your full name"
+          disabled={isSubmitting}
+        />
+
+        <label htmlFor="edit-username">Username</label>
+        <input
+          id="edit-username"
+          type="text"
+          value={username}
+          onChange={(event) => setUsername(event.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
+          placeholder="Enter your username"
           disabled={isSubmitting}
         />
 

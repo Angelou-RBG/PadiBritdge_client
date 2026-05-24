@@ -19,6 +19,7 @@ function hashPassword(password) {
 function buildUserRow(user) {
     return {
         id: user.id,
+        username: user.username,
         fullName: user.full_name,
         email: user.email,
         userType: user.user_type || 'basic',
@@ -123,6 +124,7 @@ function initializeDatabase(callback) {
         db.run(`
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
                 full_name TEXT NOT NULL,
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
@@ -341,6 +343,20 @@ function initializeDatabase(callback) {
             const existingColumns = new Set((columns || []).map((column) => column.name))
             if (!existingColumns.has('attachment_type')) {
                 db.run(`ALTER TABLE posts ADD COLUMN attachment_type TEXT DEFAULT 'none'`, handleErr('posts'))
+            }
+        })
+
+        db.all(`PRAGMA table_info(users)`, (err, columns) => {
+            if (err) return handleErr('users')(err)
+            const existingColumns = new Set((columns || []).map((column) => column.name))
+            if (!existingColumns.has('username')) {
+                db.run(`ALTER TABLE users ADD COLUMN username TEXT`, (alterErr) => {
+                    if (alterErr) return handleErr('users')(alterErr)
+                    db.run(`UPDATE users SET username = LOWER(REPLACE(REPLACE(full_name, ' ', ''), '@', '')) || id WHERE username IS NULL`, (updateErr) => {
+                        if (updateErr) return handleErr('users')(updateErr)
+                        db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)`, handleErr('users'))
+                    })
+                })
             }
         })
 

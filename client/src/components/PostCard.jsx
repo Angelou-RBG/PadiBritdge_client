@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getTagStyle, normalizeTag } from '../utils/tagTheme';
+import MediaHandler from './MediaHandler';
+import { getComments } from '../services/api';
+import './PostCard.css';
 
 function formatTags(tags) {
   if (Array.isArray(tags)) {
@@ -35,6 +38,25 @@ function formatImages(images) {
 export default function PostCard({ post, linkTo }) {
   const tagList = formatTags(post?.tags);
   const imageList = formatImages(post?.images);
+  const postId = post?.id || post?.post_id;
+
+  const [commentCount, setCommentCount] = useState(0);
+
+  useEffect(() => {
+    let isActive = true;
+    if (postId) {
+      getComments(postId)
+        .then((data) => {
+          if (isActive && data?.comments) {
+            setCommentCount(data.comments.length);
+          }
+        })
+        .catch((err) => console.error('Failed to fetch comments for post', postId, err));
+    }
+    return () => {
+      isActive = false;
+    };
+  }, [postId]);
 
   const card = (
     <article className="post-card">
@@ -54,15 +76,12 @@ export default function PostCard({ post, linkTo }) {
         </div>
       </header>
 
-      {imageList.length > 0 ? (
-        <div className="post-card-images" aria-label="Post images">
-          {imageList.map((image) => (
-            <img key={image.id} className="post-card-image" src={image.url} alt={image.alt} loading="lazy" />
-          ))}
-        </div>
-      ) : null}
-
       <p className="post-card-body">{post?.textBody || 'No post body available.'}</p>
+  
+      <MediaHandler images={imageList} disableLightbox />
+      <footer className="post-card-footer">
+        <span className="post-card-capsule">💬 {commentCount}</span>
+      </footer>
     </article>
   );
 

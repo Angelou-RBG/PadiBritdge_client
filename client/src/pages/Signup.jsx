@@ -6,6 +6,7 @@ export default function Signup() {
   const navigate = useNavigate();
 
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -17,7 +18,7 @@ export default function Signup() {
     setIsSubmitting(true);
 
     try {
-      await signupRequest({ fullName, email, password });
+      await signupRequest({ fullName, username, email, password });
       navigate('/login', {
         replace: true,
         state: { signupComplete: true, suggestedEmail: email },
@@ -41,6 +42,15 @@ export default function Signup() {
           type="text"
           value={fullName}
           onChange={(event) => setFullName(event.target.value)}
+          required
+        />
+
+        <label htmlFor="signup-username">Username</label>
+        <input
+          id="signup-username"
+          type="text"
+          value={username}
+          onChange={(event) => setUsername(event.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
           required
         />
 
