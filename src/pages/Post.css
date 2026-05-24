@@ -1,0 +1,129 @@
+.post-page-shell {
+  display: grid;
+  gap: 18px;
+  margin-top: 25px;
+}
+
+.post-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.post-page-header--deleted {
+  justify-content: flex-start;
+}
+
+.post-back-btn {
+  width: fit-content;
+  background: var(--dark-btn);
+  color: #fff;
+  border: none;
+}
+
+.post-back-btn:hover,
+.post-back-btn:focus-visible {
+  background: #263041;
+  color: #fff;
+}
+
+.post-page-actions-dropdown {
+  flex: 0 0 auto;
+}
+
+.post-page-actions-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.post-page-actions-menu {
+  min-width: 200px;
+}
+
+.post-page-title {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--text-dark);
+}
+
+.post-page-unavailable {
+  min-height: 55vh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--danger);
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  font-weight: 800;
+}
+
+.post-page-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.post-page-post-type {
+  margin: 0;
+  color: var(--text-muted-green);
+  font-weight: 700;
+}
+
+.post-page-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.post-page-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--tag-bg, #dce7dc);
+  color: var(--tag-text, var(--text-dark));
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
+.post-page-tag-empty {
+  background: #e7e9ef;
+  color: #70798b;
+}
+
+.post-page-images {
+  display: grid;
+  gap: 12px;
+}
+
+.post-page-image {
+  width: 100%;
+  max-height: 520px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid #d8e1d8;
+  background: #fff;
+}
+
+.post-page-body {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--text-dark);
+  font-size: 1rem;
+}
+
+.post-page-loading {
+  color: var(--text-dark);
+  font-weight: 600;
+}
