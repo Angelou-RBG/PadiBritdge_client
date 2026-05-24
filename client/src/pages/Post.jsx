@@ -247,6 +247,8 @@ export default function Post() {
         </div>
       </div>
 
+      <div className="post-page-body">{post?.textBody || 'No post body available.'}</div>
+
       {imageList.length > 0 ? (
         <div className="post-page-images" aria-label="Post images">
           {imageList.map((image) => (
@@ -290,8 +292,6 @@ export default function Post() {
           )}
         </div>
       )}
-
-      <div className="post-page-body">{post?.textBody || 'No post body available.'}</div>
 
       <CommentSection postId={postId} />
     </section>
