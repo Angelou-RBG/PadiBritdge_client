@@ -300,11 +300,38 @@ function initializeDatabase(callback) {
                 log_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 transaction_id INTEGER NOT NULL,
                 variety_id INTEGER NOT NULL,
-                quantity_change INTEGER NOT NULL,
+                value_changed TEXT NOT NULL,
+                before_value REAL NOT NULL,
+                after_value REAL NOT NULL,
+                logged_at TEXT DEFAULT (datetime('now', 'localtime')),
                 FOREIGN KEY (transaction_id) REFERENCES transactions(transaction_id) ON DELETE CASCADE,
                 FOREIGN KEY (variety_id) REFERENCES rice_varieties(variety_id)
             )
         `, handleErr('inventory_logs'))
+
+        db.all(`PRAGMA table_info(inventory_logs)`, (inventoryLogError, columns) => {
+            if (inventoryLogError) {
+                return handleErr('inventory_logs')(inventoryLogError)
+            }
+
+            const existingColumns = new Set((columns || []).map((column) => column.name))
+
+            if (!existingColumns.has('value_changed')) {
+                db.run(`ALTER TABLE inventory_logs ADD COLUMN value_changed TEXT`, handleErr('inventory_logs'))
+            }
+
+            if (!existingColumns.has('before_value')) {
+                db.run(`ALTER TABLE inventory_logs ADD COLUMN before_value REAL`, handleErr('inventory_logs'))
+            }
+
+            if (!existingColumns.has('after_value')) {
+                db.run(`ALTER TABLE inventory_logs ADD COLUMN after_value REAL`, handleErr('inventory_logs'))
+            }
+
+            if (!existingColumns.has('logged_at')) {
+                db.run(`ALTER TABLE inventory_logs ADD COLUMN logged_at TEXT`, handleErr('inventory_logs'))
+            }
+        })
 
         db.run(`
             CREATE TABLE IF NOT EXISTS transaction_types (

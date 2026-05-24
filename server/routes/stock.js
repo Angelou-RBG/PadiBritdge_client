@@ -4,6 +4,25 @@ const { db, sendDatabaseError } = require('../data-access')
 
 const router = express.Router()
 
+function insertInventoryLogEntries(entries, transactionId, varietyId, onComplete, onError) {
+    if (!entries.length) {
+        return onComplete()
+    }
+
+    const [entry, ...remainingEntries] = entries
+    db.run(
+        `INSERT INTO inventory_logs (transaction_id, variety_id, value_changed, before_value, after_value, logged_at) VALUES (?, ?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+        [transactionId, varietyId, entry.valueChanged, entry.beforeValue, entry.afterValue, entry.loggedAt || null],
+        (error) => {
+            if (error) {
+                return onError(error)
+            }
+
+            return insertInventoryLogEntries(remainingEntries, transactionId, varietyId, onComplete, onError)
+        }
+    )
+}
+
 router.get('/api/stock-listings', (request, response) => {
     const { userId } = request.query
     let sql = `SELECT
@@ -63,7 +82,34 @@ router.put('/api/stock-listings/:id', (request, response) => {
         if (error) return sendDatabaseError(response, error)
         if (!currentStock) return response.status(404).json({ message: 'Stock listing not found or unauthorized.' })
 
-        const physicalChange = newPhysical - currentStock.physical_sacks
+        const inventoryLogEntries = []
+
+        if (newPhysical !== currentStock.physical_sacks) {
+            inventoryLogEntries.push({
+                valueChanged: 'physical_sacks',
+                beforeValue: currentStock.physical_sacks,
+                afterValue: newPhysical,
+                loggedAt: timestamp || null,
+            })
+        }
+
+        if (newAllocated !== currentStock.allocated_sacks) {
+            inventoryLogEntries.push({
+                valueChanged: 'allocated_sacks',
+                beforeValue: currentStock.allocated_sacks,
+                afterValue: newAllocated,
+                loggedAt: timestamp || null,
+            })
+        }
+
+        if (newPrice !== currentStock.wholesale_price) {
+            inventoryLogEntries.push({
+                valueChanged: 'wholesale_price',
+                beforeValue: currentStock.wholesale_price,
+                afterValue: newPrice,
+                loggedAt: timestamp || null,
+            })
+        }
 
         db.run('BEGIN TRANSACTION', (beginError) => {
             if (beginError) return sendDatabaseError(response, beginError)
@@ -84,19 +130,18 @@ router.put('/api/stock-listings/:id', (request, response) => {
                 )
             }
 
-            if (physicalChange !== 0) {
+            if (inventoryLogEntries.length > 0) {
                 db.run(
                     `INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
                     [userId, 'MANUAL_CORRECTION', referenceId || 'MODIFICATION', null, timestamp || null],
                     function (txError) {
                         if (txError) return db.run('ROLLBACK', () => sendDatabaseError(response, txError))
-                        db.run(
-                            `INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`,
-                            [this.lastID, currentStock.variety_id, physicalChange],
-                            (insertError) => {
-                                if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
-                                updateStock()
-                            }
+                        insertInventoryLogEntries(
+                            inventoryLogEntries,
+                            this.lastID,
+                            currentStock.variety_id,
+                            updateStock,
+                            (insertError) => db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
                         )
                     }
                 )
@@ -110,6 +155,11 @@ router.put('/api/stock-listings/:id', (request, response) => {
 router.get('/api/inventory-logs', (request, response) => {
     const { userId } = request.query
 
+    const normalizedUserId = Number(userId)
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+        return response.status(400).json({ message: 'Valid user id is required.' })
+    }
+
     let sql = `
         SELECT 
             il.log_id,
@@ -117,7 +167,10 @@ router.get('/api/inventory-logs', (request, response) => {
             t.user_id,
             il.variety_id,
             t.transaction_type,
-            il.quantity_change,
+            il.value_changed,
+            il.before_value,
+            il.after_value,
+            il.logged_at,
             t.reference_id,
             t.timestamp,
             t.customer_id,
@@ -131,11 +184,8 @@ router.get('/api/inventory-logs', (request, response) => {
         LEFT JOIN transaction_types tt ON t.transaction_type = tt.type_name
     `
 
-    const params = []
-    if (userId) {
-        sql += ` WHERE t.user_id = ?`
-        params.push(Number(userId))
-    }
+    const params = [normalizedUserId]
+    sql += ` WHERE t.user_id = ?`
 
     sql += ` ORDER BY t.timestamp DESC`
 
@@ -145,6 +195,38 @@ router.get('/api/inventory-logs', (request, response) => {
         }
         return response.json({ inventoryLogs: rows || [] })
     })
+})
+
+router.get('/api/transactions', (request, response) => {
+    const { userId } = request.query
+
+    const normalizedUserId = Number(userId)
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+        return response.status(400).json({ message: 'Valid user id is required.' })
+    }
+
+    db.all(
+        `SELECT
+            t.transaction_id,
+            t.user_id,
+            u.full_name AS user_name,
+            t.transaction_type,
+            t.reference_id,
+            t.customer_id,
+            t.timestamp
+         FROM transactions t
+         LEFT JOIN users u ON t.user_id = u.id
+         WHERE t.user_id = ?
+         ORDER BY t.timestamp DESC`,
+        [normalizedUserId],
+        (error, rows) => {
+            if (error) {
+                return sendDatabaseError(response, error)
+            }
+
+            return response.json({ transactions: rows || [] })
+        }
+    )
 })
 
 router.get('/api/inventory-logs/:id', (request, response) => {
@@ -161,7 +243,10 @@ router.get('/api/inventory-logs/:id', (request, response) => {
             t.user_id,
             il.variety_id,
             t.transaction_type,
-            il.quantity_change,
+            il.value_changed,
+            il.before_value,
+            il.after_value,
+            il.logged_at,
             t.reference_id,
             t.timestamp,
             t.customer_id,
@@ -210,42 +295,53 @@ router.post('/api/inventory-logs', (request, response) => {
             actualChange = Math.abs(inputChange)
         }
 
-        db.run('BEGIN TRANSACTION', (beginError) => {
-            if (beginError) return sendDatabaseError(response, beginError)
+        db.get(
+            'SELECT physical_sacks FROM stock_listing WHERE user_id = ? AND variety_id = ?',
+            [userId, varietyId],
+            (stockError, stockRow) => {
+                if (stockError) return sendDatabaseError(response, stockError)
 
-            db.run(
-                `INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
-                [userId, transactionType, referenceId || '', customerId || null, timestamp || null],
-                function (txError) {
-                    if (txError) return db.run('ROLLBACK', () => sendDatabaseError(response, txError))
-                    const transactionId = this.lastID
+                const currentPhysical = Number(stockRow?.physical_sacks || 0)
+                const nextPhysical = Math.max(0, currentPhysical + actualChange)
+
+                db.run('BEGIN TRANSACTION', (beginError) => {
+                    if (beginError) return sendDatabaseError(response, beginError)
 
                     db.run(
-                        `INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`,
-                        [transactionId, varietyId, actualChange],
-                        function (insertError) {
-                            if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
-                            const logId = this.lastID
+                        `INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+                        [userId, transactionType, referenceId || '', customerId || null, timestamp || null],
+                        function (txError) {
+                            if (txError) return db.run('ROLLBACK', () => sendDatabaseError(response, txError))
+                            const transactionId = this.lastID
 
                             db.run(
-                                `INSERT INTO stock_listing (user_id, variety_id, physical_sacks, allocated_sacks, wholesale_price)
-                                 VALUES (?, ?, MAX(0, ?), 0, 0.0)
-                                 ON CONFLICT(user_id, variety_id) DO UPDATE SET
-                                 physical_sacks = MAX(0, physical_sacks + ?), last_updated = datetime('now', 'localtime')`,
-                                [userId, varietyId, actualChange, actualChange],
-                                (upsertError) => {
-                                    if (upsertError) return db.run('ROLLBACK', () => sendDatabaseError(response, upsertError))
-                                    db.run('COMMIT', (commitError) => {
-                                        if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
-                                        return response.status(201).json({ logId })
-                                    })
+                                `INSERT INTO inventory_logs (transaction_id, variety_id, value_changed, before_value, after_value) VALUES (?, ?, ?, ?, ?)`,
+                                [transactionId, varietyId, 'physical_sacks', currentPhysical, nextPhysical, timestamp || null],
+                                function (insertError) {
+                                    if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
+                                    const logId = this.lastID
+
+                                    db.run(
+                                        `INSERT INTO stock_listing (user_id, variety_id, physical_sacks, allocated_sacks, wholesale_price)
+                                         VALUES (?, ?, MAX(0, ?), 0, 0.0)
+                                         ON CONFLICT(user_id, variety_id) DO UPDATE SET
+                                         physical_sacks = MAX(0, physical_sacks + ?), last_updated = datetime('now', 'localtime')`,
+                                        [userId, varietyId, actualChange, actualChange],
+                                        (upsertError) => {
+                                            if (upsertError) return db.run('ROLLBACK', () => sendDatabaseError(response, upsertError))
+                                            db.run('COMMIT', (commitError) => {
+                                                if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                                                return response.status(201).json({ logId })
+                                            })
+                                        }
+                                    )
                                 }
                             )
                         }
                     )
-                }
-            )
-        })
+                })
+            }
+        )
     })
 })
 

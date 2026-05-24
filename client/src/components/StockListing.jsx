@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getStockListings } from '../services/api';
+import { createInventoryLog, getStockListings } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import FloatingCard from './FloatingCard';
 import PostCard from './PostCard';
 
 export default function StockListing({ isProfileView, isManagerView, onAddRecord, onModifyRecord, refreshKey = 0 }) {
@@ -8,7 +10,32 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState('table');
+  const [localRefresh, setLocalRefresh] = useState(0);
+  const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+  const [transactionMode, setTransactionMode] = useState('update-stock');
+  const [transactionStocks, setTransactionStocks] = useState([]);
+  const [selectedTransactionStockId, setSelectedTransactionStockId] = useState('');
+  const [selectedTransactionType, setSelectedTransactionType] = useState('');
+  const [transactionQuantity, setTransactionQuantity] = useState('');
+  const [transactionReference, setTransactionReference] = useState('');
+  const [transactionCustomer, setTransactionCustomer] = useState('');
+  const [transactionTimestamp, setTransactionTimestamp] = useState('');
+  const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
+  const { user } = useAuth();
   const navigate = useNavigate();
+
+  const updateStockTypes = [
+    { type_name: 'RESTOCK', category: 'Inbound', quantity_direction: 'Positive (+)' },
+    { type_name: 'PRODUCTION', category: 'Inbound', quantity_direction: 'Positive (+)' },
+    { type_name: 'CUSTOMER RETURN', category: 'Inbound', quantity_direction: 'Positive (+)' },
+  ];
+
+  const addTransactionTypes = [
+    { type_name: 'SALE', category: 'Outbound', quantity_direction: 'Negative (-)' },
+    { type_name: 'WASTAGE', category: 'Outbound', quantity_direction: 'Negative (-)' },
+  ];
+
+  const availableTransactionTypes = transactionMode === 'update-stock' ? updateStockTypes : addTransactionTypes;
 
   useEffect(() => {
     let isActive = true;
@@ -36,7 +63,117 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
     return () => {
       isActive = false;
     };
-  }, [refreshKey]);
+  }, [refreshKey, localRefresh]);
+
+  useEffect(() => {
+    if (!isTransactionModalOpen) {
+      return undefined;
+    }
+
+    let isActive = true;
+
+    async function fetchTransactionStocks() {
+      try {
+        const data = await getStockListings({ userId: user?.id || user?._id });
+        if (isActive) {
+          setTransactionStocks(data?.stockListings || []);
+        }
+      } catch (fetchError) {
+        if (isActive) {
+          setTransactionStocks([]);
+        }
+      }
+    }
+
+    fetchTransactionStocks();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isTransactionModalOpen, user]);
+
+  useEffect(() => {
+    if (!isTransactionModalOpen) {
+      return;
+    }
+
+    if (!availableTransactionTypes.length) {
+      return;
+    }
+
+    const hasCurrentType = availableTransactionTypes.some(item => item.type_name === selectedTransactionType);
+    if (!hasCurrentType) {
+      setSelectedTransactionType(availableTransactionTypes[0].type_name);
+    }
+  }, [availableTransactionTypes, isTransactionModalOpen, selectedTransactionType]);
+
+  useEffect(() => {
+    if (!isTransactionModalOpen) {
+      return;
+    }
+
+    if (!transactionStocks.length) {
+      setSelectedTransactionStockId('');
+      return;
+    }
+
+    const hasCurrentStock = transactionStocks.some(stock => String(stock.variety_id) === String(selectedTransactionStockId));
+    if (!hasCurrentStock) {
+      setSelectedTransactionStockId(String(transactionStocks[0].variety_id));
+    }
+  }, [isTransactionModalOpen, selectedTransactionStockId, transactionStocks]);
+
+  const openTransactionModal = (mode) => {
+    const nextMode = mode === 'add-transaction' ? 'add-transaction' : 'update-stock';
+    setTransactionMode(nextMode);
+    setTransactionQuantity('');
+    setTransactionReference('');
+    setTransactionCustomer('');
+    setTransactionTimestamp('');
+    setSelectedTransactionStockId('');
+    setSelectedTransactionType('');
+    setIsTransactionModalOpen(true);
+  };
+
+  const closeTransactionModal = () => {
+    setIsTransactionModalOpen(false);
+    setTransactionMode('update-stock');
+    setSelectedTransactionStockId('');
+    setSelectedTransactionType('');
+    setTransactionQuantity('');
+    setTransactionReference('');
+    setTransactionCustomer('');
+    setTransactionTimestamp('');
+    setIsSubmittingTransaction(false);
+  };
+
+  const handleTransactionSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!selectedTransactionStockId || !selectedTransactionType || !transactionQuantity) {
+      return;
+    }
+
+    try {
+      setIsSubmittingTransaction(true);
+      const currentUserId = user?.id || user?._id;
+      await createInventoryLog({
+        userId: currentUserId,
+        varietyId: Number(selectedTransactionStockId),
+        transactionType: selectedTransactionType,
+        quantityChange: Number(transactionQuantity),
+        referenceId: transactionReference.trim() || `${transactionMode === 'update-stock' ? 'STOCK' : 'TXN'}-${Date.now()}`,
+        customerId: transactionCustomer.trim() || null,
+        timestamp: transactionTimestamp || null,
+      });
+      setLocalRefresh(prev => prev + 1);
+      closeTransactionModal();
+    } catch (submitError) {
+      alert(submitError.response?.data?.message || 'Failed to save transaction.');
+    } finally {
+      setIsSubmittingTransaction(false);
+    }
+  };
 
   if (isLoading) return <div>Loading stock listings...</div>;
   if (error) return <div className="error-text">{error}</div>;
@@ -53,10 +190,10 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
               padding: '0.4rem 1rem',
               border: 'none',
               borderRadius: '6px',
-              backgroundColor: viewMode === 'table' ? '#fff' : 'transparent',
-              color: viewMode === 'table' ? '#0f172a' : '#64748b',
+              backgroundColor: viewMode === 'table' ? '#16a34a' : 'transparent',
+              color: viewMode === 'table' ? '#fff' : '#166534',
               fontWeight: viewMode === 'table' ? '600' : '500',
-              boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              boxShadow: viewMode === 'table' ? '0 1px 3px rgba(22,101,52,0.18)' : 'none',
               cursor: 'pointer',
               transition: 'all 0.2s',
               fontSize: '0.9rem'
@@ -71,10 +208,10 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
               padding: '0.4rem 1rem',
               border: 'none',
               borderRadius: '6px',
-              backgroundColor: viewMode === 'card' ? '#fff' : 'transparent',
-              color: viewMode === 'card' ? '#0f172a' : '#64748b',
+              backgroundColor: viewMode === 'card' ? '#16a34a' : 'transparent',
+              color: viewMode === 'card' ? '#fff' : '#166534',
               fontWeight: viewMode === 'card' ? '600' : '500',
-              boxShadow: viewMode === 'card' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              boxShadow: viewMode === 'card' ? '0 1px 3px rgba(22,101,52,0.18)' : 'none',
               cursor: 'pointer',
               transition: 'all 0.2s',
               fontSize: '0.9rem'
@@ -159,7 +296,9 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
 
       {isProfileView && !isManagerView && (
         <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="primary-btn" onClick={() => navigate('/stock-manager')}>Open PadiManage</button>
+          <button type="button" className="primary-btn" onClick={() => navigate('/padi-manage')}>Open PadiManage</button>
+          <button type="button" className="primary-btn" onClick={() => openTransactionModal('update-stock')}>Update Stock</button>
+          <button type="button" className="ghost-btn" onClick={() => openTransactionModal('add-transaction')}>Add Transaction</button>
           <button type="button" className="ghost-btn">Post Stock Listing</button>
           <button type="button" className="ghost-btn">Export Inventory to CSV</button>
           <button type="button" className="ghost-btn">Generate Weekly Sales Report</button>
@@ -169,11 +308,106 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
       {isManagerView && (
         <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
           <button type="button" className="primary-btn" onClick={onModifyRecord}>Modify Existing Records</button>
+          <button type="button" className="primary-btn" onClick={() => openTransactionModal('update-stock')}>Update Stock</button>
+          <button type="button" className="ghost-btn" onClick={() => openTransactionModal('add-transaction')}>Add Transaction</button>
           <button type="button" className="ghost-btn">Post Stock Listing</button>
           <button type="button" className="ghost-btn">Export Inventory to CSV</button>
           <button type="button" className="ghost-btn">Generate Weekly Sales Report</button>
         </div>
       )}
+
+      <FloatingCard
+        open={isTransactionModalOpen}
+        onClose={closeTransactionModal}
+        title={transactionMode === 'update-stock' ? 'Update Stock' : 'Add Transaction'}
+      >
+        <form className="form-shell" onSubmit={handleTransactionSubmit}>
+          <p style={{ marginTop: 0, color: '#64748b', lineHeight: '1.5' }}>
+            {transactionMode === 'update-stock'
+              ? 'Record inbound stock movements outside the system using a positive quantity change.'
+              : 'Record outbound stock movements outside the system using a positive quantity change.'}
+          </p>
+
+          <label htmlFor="transaction-stock">Stock Listing</label>
+          <select
+            id="transaction-stock"
+            value={selectedTransactionStockId}
+            onChange={e => setSelectedTransactionStockId(e.target.value)}
+            required
+            disabled={isSubmittingTransaction}
+          >
+            <option value="">-- Select Stock --</option>
+            {transactionStocks.map(stock => (
+                <option key={stock.stock_id} value={stock.variety_id}>
+                {stock.name} ({stock.quality_grade})
+              </option>
+            ))}
+          </select>
+
+          <label htmlFor="transaction-type">Transaction Type</label>
+          <select
+            id="transaction-type"
+            value={selectedTransactionType}
+            onChange={e => setSelectedTransactionType(e.target.value)}
+            required
+            disabled={isSubmittingTransaction}
+          >
+            <option value="">-- Select Type --</option>
+            {availableTransactionTypes.map(type => (
+              <option key={type.type_name} value={type.type_name}>
+                {type.type_name} - {type.category} - {type.quantity_direction}
+              </option>
+            ))}
+          </select>
+
+          <label htmlFor="transaction-quantity">Quantity Change (Sacks)</label>
+          <input
+            id="transaction-quantity"
+            type="number"
+            min="1"
+            step="1"
+            value={transactionQuantity}
+            onChange={e => setTransactionQuantity(e.target.value)}
+            required
+            disabled={isSubmittingTransaction}
+          />
+
+          <label htmlFor="transaction-reference">Reference ID</label>
+          <input
+            id="transaction-reference"
+            type="text"
+            placeholder={transactionMode === 'update-stock' ? 'e.g. Restock receipt' : 'e.g. Cash sale, wastage log'}
+            value={transactionReference}
+            onChange={e => setTransactionReference(e.target.value)}
+            disabled={isSubmittingTransaction}
+          />
+
+          <label htmlFor="transaction-customer">Customer / Notes</label>
+          <input
+            id="transaction-customer"
+            type="text"
+            placeholder={transactionMode === 'update-stock' ? 'Optional supplier or source' : 'Optional customer name or note'}
+            value={transactionCustomer}
+            onChange={e => setTransactionCustomer(e.target.value)}
+            disabled={isSubmittingTransaction}
+          />
+
+          <label htmlFor="transaction-timestamp">Transaction Date</label>
+          <input
+            id="transaction-timestamp"
+            type="datetime-local"
+            value={transactionTimestamp}
+            onChange={e => setTransactionTimestamp(e.target.value)}
+            disabled={isSubmittingTransaction}
+          />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+            <button type="submit" className="primary-btn" disabled={isSubmittingTransaction}>
+              {isSubmittingTransaction ? 'Saving...' : 'Save Transaction'}
+            </button>
+          </div>
+        </form>
+      </FloatingCard>
     </div>
   );
 }

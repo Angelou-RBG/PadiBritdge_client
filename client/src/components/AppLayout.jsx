@@ -13,14 +13,23 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
-  const isFeedShell = /^\/(feed|create)$/.test(location.pathname) || /^\/(post|edit|read)\/[^/]+$/.test(location.pathname);
+  const isFeedShell = /^\/(feed|create|padi-manage|padi-manage-query)$/.test(location.pathname) || /^\/(post|edit|read)\/[^/]+$/.test(location.pathname);
   const { setFilters } = useFilters();
+  const isStockManagerPage = location.pathname === '/padi-manage';
+  const isQueryPage = location.pathname === '/padi-manage-query';
+  const queryParams = new URLSearchParams(location.search);
+  const querySection = queryParams.get('section') || '';
+  const initialFilters = React.useMemo(() => Object.fromEntries(new URLSearchParams(location.search).entries()), [location.search]);
 
-  const profileId = user?.id || user?._id || 'me';
+  const profileId = user?.id || user?._id || null;
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const openPadiManageQuery = (section) => {
+    navigate(`/padi-manage-query?section=${encodeURIComponent(section)}`);
   };
 
   return (
@@ -49,9 +58,11 @@ export default function AppLayout() {
               <NavLink to="/feed" className={navClass}>
                 Home
               </NavLink>
-              <NavLink to={`/profile/${profileId}`} className={navClass}>
-                Profile
-              </NavLink>
+              {profileId && (
+                <NavLink to={`/profile/${profileId}`} className={navClass}>
+                  Profile
+                </NavLink>
+              )}
               <NavLink to="/create" className={navClass}>
                 Create Post
               </NavLink>
@@ -62,7 +73,7 @@ export default function AppLayout() {
           )}
         </nav>
       </header>
-
+      {/* Right Navigation Side Bar */}
       {location.pathname === '/' ? (
         <div className="landing-content">
           <Outlet />
@@ -73,6 +84,7 @@ export default function AppLayout() {
             <aside className="sidebar scrollable-col">
               <div className="sidebar-header">Navigation</div>
               <NavLink to="/feed" className={({isActive})=> isActive? 'nav-link-custom active' : 'nav-link-custom'}>Homepage</NavLink>
+              <NavLink to="/padi-manage" className={({isActive})=> isActive? 'nav-link-custom active' : 'nav-link-custom'}>PadiManage</NavLink>
               <NavLink to="#" className="nav-link-custom">Future NAV</NavLink>
               <NavLink to="#" className="nav-link-custom">Future NAV</NavLink>
               <div className="sidebar-divider"></div>
@@ -84,10 +96,31 @@ export default function AppLayout() {
             </section>
 
             <aside className="modules scrollable-col">
-              {location.pathname === '/feed' && <SearchFilter onFilterChange={setFilters} />}
-              <div className="module-box">Module</div>
-              <div className="module-box">Module</div>
-              <div className="module-box">Module</div>
+              {location.pathname === '/feed' && <SearchFilter mode="feed" onFilterChange={setFilters} />}
+              {isQueryPage && (
+                <SearchFilter
+                  mode="history"
+                  activeSection={querySection || 'inventory-logs'}
+                  initialFilters={initialFilters}
+                  onFilterChange={(filters) => navigate(`/padi-manage-query?${new URLSearchParams(filters).toString()}`)}
+                />
+              )}
+              {isStockManagerPage && (
+                <div className="search-module">
+                  <h4>History</h4>
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    <button type="button" className="ghost-btn" onClick={() => openPadiManageQuery('inventory-logs')}>
+                      Inventory Logs
+                    </button>
+                    <button type="button" className="ghost-btn" onClick={() => openPadiManageQuery('order-rfqs')}>
+                      Allocation Requests
+                    </button>
+                    <button type="button" className="ghost-btn" onClick={() => openPadiManageQuery('transactions')}>
+                      Transactions
+                    </button>
+                  </div>
+                </div>
+              )}
             </aside>
           </div>
         </div>

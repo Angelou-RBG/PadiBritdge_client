@@ -4,6 +4,25 @@ const { db, sendDatabaseError } = require('../data-access')
 
 const router = express.Router()
 
+function insertInventoryLogEntries(entries, transactionId, varietyId, onComplete, onError) {
+    if (!entries.length) {
+        return onComplete()
+    }
+
+    const [entry, ...remainingEntries] = entries
+    db.run(
+        `INSERT INTO inventory_logs (transaction_id, variety_id, value_changed, before_value, after_value, logged_at) VALUES (?, ?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+        [transactionId, varietyId, entry.valueChanged, entry.beforeValue, entry.afterValue, entry.loggedAt || null],
+        (error) => {
+            if (error) {
+                return onError(error)
+            }
+
+            return insertInventoryLogEntries(remainingEntries, transactionId, varietyId, onComplete, onError)
+        }
+    )
+}
+
 router.post('/api/order-rfqs', (request, response) => {
     const { buyerId, millerId, items, fulfillmentDeadline } = request.body || {}
 
@@ -90,7 +109,7 @@ router.put('/api/order-rfqs/:id', (request, response) => {
             return response.json({ message: 'Order status updated successfully.' })
         }
 
-        db.all(`SELECT ori.*, sl.wholesale_price, rv.name AS variety_name FROM order_rfq_items ori LEFT JOIN stock_listing sl ON ? = sl.user_id AND ori.variety_id = sl.variety_id LEFT JOIN rice_varieties rv ON ori.variety_id = rv.variety_id WHERE ori.order_id = ?`, [order.miller_id, orderId], (itemsError, items) => {
+                db.all(`SELECT ori.*, sl.wholesale_price, sl.physical_sacks, sl.allocated_sacks, rv.name AS variety_name FROM order_rfq_items ori LEFT JOIN stock_listing sl ON ? = sl.user_id AND ori.variety_id = sl.variety_id LEFT JOIN rice_varieties rv ON ori.variety_id = rv.variety_id WHERE ori.order_id = ?`, [order.miller_id, orderId], (itemsError, items) => {
             if (itemsError) return sendDatabaseError(response, itemsError)
             db.run('BEGIN TRANSACTION', (beginError) => {
                 if (beginError) return sendDatabaseError(response, beginError)
@@ -115,20 +134,47 @@ router.put('/api/order-rfqs/:id', (request, response) => {
                             let pending = items.length; let hasError = false
                             if (pending === 0) return db.run('COMMIT', () => response.json({ message: 'Order fulfilled.' }))
                             items.forEach((item) => {
-                                db.run(`INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`, [txId, item.variety_id, -Math.abs(item.requested_sacks)], (invError) => {
-                                    if (hasError) return
-                                    if (invError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, invError)) }
-                                    db.run(`UPDATE stock_listing SET allocated_sacks = MAX(0, allocated_sacks - ?), physical_sacks = MAX(0, physical_sacks - ?), last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`, [item.requested_sacks, item.requested_sacks, order.miller_id, item.variety_id], (stockError) => {
-                                        if (hasError) return
-                                        if (stockError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, stockError)) }
-                                        db.run(`INSERT INTO receipts (transaction_id, item, item_quantity, cost, date) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`, [txId, item.variety_name, item.requested_sacks, item.requested_sacks * (item.wholesale_price || 0), timestamp || null], (receiptError) => {
+                                const currentPhysical = Number(item.physical_sacks || 0)
+                                const currentAllocated = Number(item.allocated_sacks || 0)
+                                const afterPhysical = Math.max(0, currentPhysical - item.requested_sacks)
+                                const afterAllocated = Math.max(0, currentAllocated - item.requested_sacks)
+                                const inventoryLogEntries = [
+                                    {
+                                        valueChanged: 'allocated_sacks',
+                                        beforeValue: currentAllocated,
+                                        afterValue: afterAllocated,
+                                        loggedAt: timestamp || null,
+                                    },
+                                    {
+                                        valueChanged: 'physical_sacks',
+                                        beforeValue: currentPhysical,
+                                        afterValue: afterPhysical,
+                                        loggedAt: timestamp || null,
+                                    },
+                                ]
+
+                                insertInventoryLogEntries(
+                                    inventoryLogEntries,
+                                    txId,
+                                    item.variety_id,
+                                    () => {
+                                        db.run(`UPDATE stock_listing SET allocated_sacks = MAX(0, allocated_sacks - ?), physical_sacks = MAX(0, physical_sacks - ?), last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`, [item.requested_sacks, item.requested_sacks, order.miller_id, item.variety_id], (stockError) => {
                                             if (hasError) return
-                                            if (receiptError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, receiptError)) }
-                                            pending--
-                                            if (pending === 0) return db.run('COMMIT', () => response.json({ message: 'Order fulfilled successfully.' }))
+                                            if (stockError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, stockError)) }
+                                            db.run(`INSERT INTO receipts (transaction_id, item, item_quantity, cost, date) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`, [txId, item.variety_name, item.requested_sacks, item.requested_sacks * (item.wholesale_price || 0), timestamp || null], (receiptError) => {
+                                                if (hasError) return
+                                                if (receiptError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, receiptError)) }
+                                                pending--
+                                                if (pending === 0) return db.run('COMMIT', () => response.json({ message: 'Order fulfilled successfully.' }))
+                                            })
                                         })
-                                    })
-                                })
+                                    },
+                                    (invError) => {
+                                        if (hasError) return
+                                        hasError = true
+                                        return db.run('ROLLBACK', () => sendDatabaseError(response, invError))
+                                    }
+                                )
                             })
                         })
                     } else {

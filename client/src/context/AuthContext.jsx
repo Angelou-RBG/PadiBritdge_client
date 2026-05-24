@@ -63,6 +63,28 @@ export function AuthProvider({ children }) {
     setAuthState(nextState);
   };
 
+  const updateUser = (nextUser) => {
+    try {
+      const localRaw = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (localRaw) {
+        const parsed = JSON.parse(localRaw);
+        parsed.user = nextUser;
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(parsed));
+      } else {
+        const sessionRaw = sessionStorage.getItem(AUTH_STORAGE_KEY);
+        if (sessionRaw) {
+          const parsed = JSON.parse(sessionRaw);
+          parsed.user = nextUser;
+          sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(parsed));
+        }
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
+
+    setAuthState(prev => ({ ...prev, user: nextUser }));
+  };
+
   const logout = () => {
     clearAuthStorage();
     setAuthState({
@@ -79,6 +101,7 @@ export function AuthProvider({ children }) {
       userType: authState.user?.userType || 'basic',
       isReady: authState.ready,
       isAuthenticated: Boolean(authState.token),
+      updateUser,
       login,
       logout,
     }),

@@ -216,6 +216,11 @@ export async function createInventoryLog(payload) {
   return response.data;
 }
 
+export async function getTransactions(params) {
+  const response = await api.get('/api/transactions', { params });
+  return response.data;
+}
+
 // User Profile
 export async function updateProfile(userId, payload) {
   const response = await api.put(`/api/users/${userId}`, payload);

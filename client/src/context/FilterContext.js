@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useMemo } from 'react';
 
 const FilterContext = createContext();
 
@@ -9,10 +9,10 @@ export function useFilters() {
 export function FilterProvider({ children }) {
     const [filters, setFilters] = useState({});
 
-    const value = {
+    const value = useMemo(() => ({
         filters,
         setFilters,
-    };
+    }), [filters, setFilters]);
 
     return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;
 }

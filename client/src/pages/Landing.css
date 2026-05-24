@@ -1,6 +1,6 @@
 :root {
-    --brand-green: #678c4f;
-    --dark-btn: #344054;
+    --brand-green: #15803d;
+    --dark-btn: #166534;
     --hero-bg: #b5beb5;
     --footer-bg: #5a7755;
     --wf-gray: #aab2c8;
@@ -36,7 +36,24 @@
 
 .action-row { display:flex; gap:12px; justify-content:center; margin-top:16px; }
 .primary-btn, .btn-green { background: var(--brand-green); color: #fff; padding:10px 22px; border-radius:6px; text-decoration:none; display:inline-block; }
-.ghost-btn, .btn-outline-white { background:transparent; color:#fff; border:2px solid #fff; padding:8px 20px; border-radius:6px; text-decoration:none; display:inline-block; }
+.ghost-btn { background:#dcfce7; color:#14532d; border:2px solid #86efac; padding:8px 20px; border-radius:6px; text-decoration:none; display:inline-block; }
+
+.btn-outline-white {
+    background: var(--brand-green);
+    color: #fff;
+    border: 2px solid var(--brand-green);
+    padding: 8px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-outline-white:hover,
+.btn-outline-white:focus-visible {
+    background: #166534;
+    border-color: #166534;
+    outline: none;
+}
 
 .wf-box-green { background-color: var(--brand-green); height: 30px; width: 40%; margin: 12px auto; border-radius:2px; }
 .wf-line { background-color: var(--wf-gray); height: 10px; margin: 8px auto; border-radius:2px; }

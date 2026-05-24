@@ -6,7 +6,7 @@ import { updateProfile } from '../services/api';
 
 export default function EditProfile() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -31,12 +31,17 @@ export default function EditProfile() {
 
     try {
       setIsSubmitting(true);
-      await updateProfile(user?.id || user?._id, {
+      const res = await updateProfile(user?.id || user?._id, {
         fullName: fullName.trim(),
         email: email.trim(),
       });
 
-      setNotification({ type: 'success', message: 'Profile updated successfully! Note: Refresh to see changes.' });
+      // Update auth context so profile reflects changes immediately
+      if (res?.user) {
+        updateUser(res.user);
+      }
+
+      setNotification({ type: 'success', message: 'Profile updated successfully.' });
     } catch (error) {
       setNotification({ type: 'error', message: error.response?.data?.message || 'Failed to update profile.' });
     } finally {

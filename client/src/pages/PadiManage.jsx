@@ -7,9 +7,15 @@ import NotificationBean from '../components/NotificationBean';
 import { useAuth } from '../context/AuthContext';
 import { getStockListings, updateStockListing } from '../services/api';
 
-export default function StockManager() {
+export default function PadiManage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  const getLocalDateTimeValue = () => {
+    const now = new Date();
+    const offsetMs = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+  };
 
   const [notification, setNotification] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -20,7 +26,6 @@ export default function StockManager() {
   const [modifyPhysical, setModifyPhysical] = useState('');
   const [modifyAllocated, setModifyAllocated] = useState('');
   const [modifyPrice, setModifyPrice] = useState('');
-  const [modifyTimestamp, setModifyTimestamp] = useState('');
   const [referenceId, setReferenceId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -44,7 +49,6 @@ export default function StockManager() {
       setModifyPhysical('');
       setModifyAllocated('');
       setModifyPrice('');
-      setModifyTimestamp('');
     }
   };
 
@@ -52,20 +56,47 @@ export default function StockManager() {
     event.preventDefault();
     setNotification(null);
     try {
+      const currentStock = stockListings.find(s => String(s.stock_id) === String(selectedStockId));
+      if (!currentStock) {
+        setNotification({ type: 'error', message: 'Selected stock listing could not be found.' });
+        return;
+      }
+
+      const nextPhysical = Number(modifyPhysical);
+      const nextAllocated = Number(modifyAllocated);
+      const nextPrice = Number(modifyPrice);
+      const changedFields = [];
+
+      if (Number(currentStock.physical_sacks) !== nextPhysical) {
+        changedFields.push('physical_sacks');
+      }
+
+      if (Number(currentStock.allocated_sacks) !== nextAllocated) {
+        changedFields.push('allocated_sacks');
+      }
+
+      if (Number(currentStock.wholesale_price) !== nextPrice) {
+        changedFields.push('wholesale_price');
+      }
+
+      if (changedFields.length === 0) {
+        setNotification({ type: 'error', message: 'No changes detected.' });
+        return;
+      }
+
       setIsSubmitting(true);
       await updateStockListing(selectedStockId, {
         userId: user?.id || user?._id,
-        physicalSacks: Number(modifyPhysical),
-        allocatedSacks: Number(modifyAllocated),
-        wholesalePrice: Number(modifyPrice),
+        physicalSacks: nextPhysical,
+        allocatedSacks: nextAllocated,
+        wholesalePrice: nextPrice,
         referenceId: referenceId.trim() || 'MODIFICATION',
-        timestamp: modifyTimestamp || null,
+        timestamp: getLocalDateTimeValue(),
       });
       setIsModifyModalOpen(false);
       setRefreshKey(prev => prev + 1);
       setSelectedStockId('');
       setReferenceId('');
-      setModifyTimestamp('');
     } catch (error) {
       setNotification({ type: 'error', message: error.response?.data?.message || 'Failed to modify record.' });
     } finally {
@@ -74,7 +105,7 @@ export default function StockManager() {
   }
 
   return (
-    <section className="page-shell card-shell">
+    <section style={{ paddingTop: '1.5rem' }}>
       <button
         type="button"
         style={{
@@ -124,11 +155,16 @@ export default function StockManager() {
           <label htmlFor="modify-price">Est. Wholesale Price (₱)</label>
           <input id="modify-price" type="number" step="0.01" min="0" value={modifyPrice} onChange={e => setModifyPrice(e.target.value)} required disabled={isSubmitting || !selectedStockId} />
 
+          <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.9rem', lineHeight: '1.4' }}>
+            Only changed fields are logged, so updating both allocated volume and price creates two inventory log entries.
+          </p>
+
           <label htmlFor="modify-reference">Reference ID / Notes (Optional)</label>
           <input id="modify-reference" type="text" placeholder="e.g., Audit or correction" value={referenceId} onChange={e => setReferenceId(e.target.value)} disabled={isSubmitting || !selectedStockId} />
 
-          <label htmlFor="modify-timestamp">Correction Date (Optional)</label>
-          <input id="modify-timestamp" type="datetime-local" value={modifyTimestamp} onChange={e => setModifyTimestamp(e.target.value)} disabled={isSubmitting || !selectedStockId} />
+          <p style={{ margin: '0.5rem 0 0', color: '#64748b', fontSize: '0.9rem', lineHeight: '1.4' }}>
+            The correction time is recorded automatically when you save the changes.
+          </p>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
             <button type="submit" className="primary-btn" disabled={isSubmitting || !selectedStockId}>

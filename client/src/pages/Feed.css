@@ -36,9 +36,9 @@
   flex: 0 0 280px;
 }
 .sidebar-header {
-  font-weight: 500;
+  font-weight: 1000;
   font-size: 1.05rem;
-  padding: 10px 16px;
+  padding: 5px 16px;
   display: flex;
   align-items: center;
   gap: 12px;

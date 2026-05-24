@@ -2,13 +2,13 @@
   --bg: #f4f5f9;
   --text: #182233;
   --soft: #5a6780;
-  --brand: #1d4ed8;
-  --brand-green: #678c4f;
-  --dark-btn: #344054;
-  --brand-soft: #dbeafe;
+  --brand: #16a34a;
+  --brand-green: #15803d;
+  --dark-btn: #166534;
+  --brand-soft: #dcfce7;
   --panel: #ffffff;
   --border: #d8deea;
-  --danger: #b91c1c;
+  --danger: #166534;
 }
 
 * {
@@ -46,6 +46,7 @@ a {
   color: var(--brand-green);
   text-decoration: none;
   letter-spacing: 0.4px;
+  font-size: 1.25rem;
 }
 
 .nav-items {
@@ -60,7 +61,7 @@ a {
   border-radius: 999px;
   color: var(--brand-green);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 1rem;
   margin: 0 10px;
   padding: 6px 12px;
 }
@@ -77,7 +78,7 @@ a {
   border-radius: 10px;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: #166534;
   cursor: pointer;
   font-weight: 600;
 }
@@ -102,24 +103,34 @@ a {
 }
 
 .ghost-btn {
+  background: #dcfce7;
+  color: #14532d;
+  border-color: #86efac;
   text-decoration: none;
   display: inline-flex;
   justify-content: center;
 }
 
+.ghost-btn:hover,
+.ghost-btn:focus-visible {
+  background: #bbf7d0;
+  border-color: #4ade80;
+  outline: none;
+}
+
 .danger-btn {
   border-radius: 10px;
   padding: 10px 14px;
-  border: 1px solid rgba(185, 28, 28, 0.28);
-  background: #fdecec;
-  color: var(--danger);
+  border: 1px solid rgba(22, 101, 52, 0.28);
+  background: #dcfce7;
+  color: #14532d;
   cursor: pointer;
   font-weight: 700;
 }
 
 .danger-btn:hover,
 .danger-btn:focus-visible {
-  background: #fbe2e2;
+  background: #bbf7d0;
   outline: none;
 }
 
@@ -236,6 +247,12 @@ a {
   box-shadow: 0 24px 60px rgba(24, 34, 51, 0.24);
   padding: 28px 24px 24px;
   animation: floatingCardIn 180ms ease-out;
+}
+
+@media (min-width: 1100px) {
+  .floating-card {
+    width: min(46vw, 920px);
+  }
 }
 
 .floating-card__close {
@@ -459,4 +476,9 @@ a {
   .nav-items {
     flex-wrap: wrap;
   }
+}
+
+/* Make tables slightly more compact across the app */
+table, table th, table td {
+  font-size: 0.85rem !important;
 }

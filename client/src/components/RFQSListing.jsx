@@ -15,6 +15,7 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
   const [fulfillReference, setFulfillReference] = useState('');
   const [fulfillTimestamp, setFulfillTimestamp] = useState('');
   const [isSubmittingFulfill, setIsSubmittingFulfill] = useState(false);
+  const [isCancelFulfillConfirmOpen, setIsCancelFulfillConfirmOpen] = useState(false);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [requestType, setRequestType] = useState('internal');
@@ -116,6 +117,18 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
     }
   };
 
+  const openCancelFulfillConfirm = () => {
+    setIsCancelFulfillConfirmOpen(true);
+  };
+
+  const handleCancelFulfillConfirm = () => {
+    setIsCancelFulfillConfirmOpen(false);
+    setFulfillModalOpen(false);
+    setSelectedFulfill(null);
+    setFulfillReference('');
+    setFulfillTimestamp('');
+  };
+
   const handleOpenAddModal = () => {
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
@@ -178,6 +191,12 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
   const pendingExtRfqs = extRfqs.filter(r => ['Pending', 'Expired', 'Rejected'].includes(r.status));
   const approvedExtRfqs = extRfqs.filter(r => ['Approved', 'Late', 'Fulfilled'].includes(r.status));
 
+  const approvedAllocations = [...approvedRfqs.map(rfq => ({ ...rfq, requestType: 'Internal' })), ...approvedExtRfqs.map(rfq => ({ ...rfq, requestType: 'External' }))].sort((left, right) => {
+    const leftDeadline = left.fulfillment_deadline ? new Date(left.fulfillment_deadline).getTime() : Number.POSITIVE_INFINITY;
+    const rightDeadline = right.fulfillment_deadline ? new Date(right.fulfillment_deadline).getTime() : Number.POSITIVE_INFINITY;
+    return leftDeadline - rightDeadline;
+  });
+
   const renderTable = (tableData, emptyMessage, isExternal = false) => (
     <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', marginBottom: '2rem' }}>
       <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', minWidth: '600px' }}>
@@ -222,12 +241,12 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
                 <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                   {rfq.status === 'Pending' ? (
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                      <button type="button" onClick={() => handleUpdateStatus(rfq, 'Approved', isExternal)} style={{ backgroundColor: '#22c55e', color: 'white', border: 'none', borderRadius: '4px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 'bold' }} title="Approve">✓</button>
-                      <button type="button" onClick={() => handleUpdateStatus(rfq, 'Rejected', isExternal)} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 'bold' }} title="Reject">✕</button>
+                      <button type="button" onClick={() => handleUpdateStatus(rfq, 'Approved', isExternal)} style={{ backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 'bold' }} title="Approve">✓</button>
+                      <button type="button" onClick={() => handleUpdateStatus(rfq, 'Rejected', isExternal)} style={{ backgroundColor: '#166534', color: 'white', border: 'none', borderRadius: '4px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 'bold' }} title="Reject">✕</button>
                     </div>
                   ) : (rfq.status === 'Approved' || rfq.status === 'Late') ? (
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                      <button type="button" onClick={() => openFulfillModal(rfq, isExternal)} style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }} title="Fulfill">Fulfill</button>
+                      <button type="button" onClick={() => openFulfillModal(rfq, isExternal)} style={{ backgroundColor: '#15803d', color: 'white', border: 'none', borderRadius: '4px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }} title="Fulfill">Fulfill</button>
                     </div>
                   ) : (
                     <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>-</span>
@@ -237,6 +256,72 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
             ))
           ) : (
             <tr><td colSpan="8" style={{ padding: '3rem 1rem', textAlign: 'center', color: '#64748b' }}>{emptyMessage}</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderApprovedTable = (tableData, emptyMessage) => (
+    <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', marginBottom: '2rem' }}>
+      <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', minWidth: '700px' }}>
+        <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+          <tr>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order ID</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date Recorded</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Buyer</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Items</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Sacks</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Deadline</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tableData.length > 0 ? (
+            tableData.map((rfq) => (
+              <tr key={`${rfq.requestType}-${rfq.order_id}`} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s' }}>
+                <td style={{ padding: '16px 20px', fontWeight: '600', color: '#0f172a' }}>#{rfq.order_id}</td>
+                <td style={{ padding: '16px 20px', color: '#64748b', fontSize: '0.9rem' }}>{rfq.date_recorded ? new Date(rfq.date_recorded).toLocaleDateString() : 'N/A'}</td>
+                <td style={{ padding: '16px 20px' }}>
+                  <span style={{ fontWeight: '600', color: rfq.requestType === 'Internal' ? '#2563eb' : '#7c3aed', backgroundColor: rfq.requestType === 'Internal' ? '#dbeafe' : '#ede9fe', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+                    {rfq.requestType}
+                  </span>
+                </td>
+                <td style={{ padding: '16px 20px', color: '#334155' }}>{rfq.requestType === 'Internal' ? rfq.buyer_id : rfq.buyer_name}</td>
+                <td style={{ padding: '16px 20px', color: '#334155' }}>
+                  <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
+                    {rfq.items && rfq.items.map((item, idx) => (
+                      <li key={idx}>{item.variety_name} <span style={{ color: '#64748b' }}>({item.quality_grade})</span> - {item.requested_sacks} sacks</li>
+                    ))}
+                  </ul>
+                </td>
+                <td style={{ padding: '16px 20px', color: '#059669', fontWeight: '600' }}>{rfq.items ? rfq.items.reduce((sum, item) => sum + item.requested_sacks, 0) : 0} sacks</td>
+                <td style={{ padding: '16px 20px', color: '#b91c1c', fontWeight: '500', fontSize: '0.9rem' }}>{rfq.fulfillment_deadline ? new Date(rfq.fulfillment_deadline).toLocaleDateString() : 'Not Set'}</td>
+                <td style={{ padding: '16px 20px' }}>
+                  <span style={{
+                    fontWeight: '600',
+                    color: rfq.status === 'Approved' ? '#059669' : (rfq.status === 'Fulfilled' ? '#2563eb' : (rfq.status === 'Late' ? '#ea580c' : (rfq.status === 'Expired' ? '#475569' : (rfq.status === 'Pending' ? '#334155' : '#dc2626')))),
+                    backgroundColor: rfq.status === 'Approved' ? '#d1fae5' : (rfq.status === 'Fulfilled' ? '#dbeafe' : (rfq.status === 'Late' ? '#ffedd5' : (rfq.status === 'Expired' ? '#e2e8f0' : (rfq.status === 'Pending' ? '#f1f5f9' : '#fee2e2')))),
+                    padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem'
+                  }}>
+                    {rfq.status}
+                  </span>
+                </td>
+                <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                  {(rfq.status === 'Approved' || rfq.status === 'Late') ? (
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                      <button type="button" onClick={() => openFulfillModal(rfq, rfq.requestType === 'External')} style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }} title="Fulfill">Fulfill</button>
+                    </div>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>-</span>
+                  )}
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr><td colSpan="9" style={{ padding: '3rem 1rem', textAlign: 'center', color: '#64748b' }}>{emptyMessage}</td></tr>
           )}
         </tbody>
       </table>
@@ -256,7 +341,7 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
       {renderTable(pendingRfqs, "No pending or past requests found.", false)}
 
       <h5 style={{ color: '#475569', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Approved Allocations</h5>
-      {renderTable(approvedRfqs, "No approved allocations found.", false)}
+      {renderApprovedTable(approvedAllocations, "No approved allocations found.")}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', marginTop: '3rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1.25rem' }}>External Allocation Requests</h4>
@@ -264,9 +349,6 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
 
       <h5 style={{ color: '#475569', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Pending & Past Requests</h5>
       {renderTable(pendingExtRfqs, "No pending or past external requests found.", true)}
-
-      <h5 style={{ color: '#475569', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Approved Allocations</h5>
-      {renderTable(approvedExtRfqs, "No approved external allocations found.", true)}
 
       <FloatingCard
         open={fulfillModalOpen}
@@ -305,11 +387,43 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
           <input id="fulfill-timestamp" type="datetime-local" value={fulfillTimestamp} onChange={e => setFulfillTimestamp(e.target.value)} disabled={isSubmittingFulfill} />
           
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-            <button type="submit" className="primary-btn" disabled={isSubmittingFulfill}>
-              {isSubmittingFulfill ? 'Processing...' : 'Confirm Fulfillment'}
-            </button>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={openCancelFulfillConfirm}
+                disabled={isSubmittingFulfill}
+                style={{ background: '#dcfce7', color: '#14532d', border: '1px solid #86efac' }}
+              >
+                Cancel Fulfillment
+              </button>
+              <button type="submit" className="primary-btn" disabled={isSubmittingFulfill}>
+                {isSubmittingFulfill ? 'Processing...' : 'Confirm Fulfillment'}
+              </button>
+            </div>
           </div>
         </form>
+      </FloatingCard>
+
+      <FloatingCard
+        open={isCancelFulfillConfirmOpen}
+        onClose={() => setIsCancelFulfillConfirmOpen(false)}
+        title="Cancel Fulfillment?"
+      >
+        <div className="form-shell">
+          <p style={{ marginTop: 0, color: '#475569', lineHeight: '1.6' }}>
+            This will close the fulfillment form and discard the current confirmation details. The RFQ record itself will not be changed.
+          </p>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+            <button type="button" className="ghost-btn" onClick={() => setIsCancelFulfillConfirmOpen(false)} style={{ background: '#dcfce7', color: '#14532d', border: '1px solid #86efac' }}>
+              Keep Editing
+            </button>
+            <button type="button" className="primary-btn" onClick={handleCancelFulfillConfirm}>
+              Yes, Cancel
+            </button>
+          </div>
+        </div>
       </FloatingCard>
 
       <FloatingCard
@@ -344,7 +458,7 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
                   {items.map((item, index) => (
                     <li key={index} style={{ marginBottom: '0.25rem' }}>
                       {item.varietyName} ({item.qualityGrade}) - {item.requestedSacks} sacks @ ₱{Number(item.wholesalePrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })} = <strong>₱{(item.requestedSacks * item.wholesalePrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
-                      <button type="button" onClick={() => handleRemoveItem(index)} style={{ marginLeft: '0.5rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}>×</button>
+                      <button type="button" onClick={() => handleRemoveItem(index)} style={{ marginLeft: '0.5rem', color: '#166534', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}>×</button>
                     </li>
                   ))}
                 </ul>

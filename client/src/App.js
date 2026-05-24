@@ -14,8 +14,9 @@ import Login from './pages/Login';
 import Post from './pages/Post';
 import Profile from './pages/Profile';
 import Read from './pages/Read';
+import PadiManage_Query from './pages/PadiManage_Query';
 import Signup from './pages/Signup';
-import StockManager from './pages/StockManager';
+import PadiManage from './pages/PadiManage';
 
 function App() {
   return (
@@ -33,7 +34,9 @@ function App() {
                 <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/create" element={<Create />} />
                 <Route path="/edit-profile" element={<EditProfile />} />
-                <Route path="/stock-manager" element={<StockManager />} />
+                <Route path="/padi-manage" element={<PadiManage />} />
+                <Route path="/stock-manager" element={<PadiManage />} />
+                <Route path="/padi-manage-query" element={<PadiManage_Query />} />
                 <Route path="/edit/:id" element={<Edit />} />
                 <Route path="/post/:id" element={<Post />} />
                 <Route path="/read/:id" element={<Read />} />
