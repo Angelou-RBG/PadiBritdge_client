@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import '../pages/Feed.css';
 import { useFilters } from '../context/FilterContext';
@@ -14,7 +14,8 @@ export default function AppLayout() {
   const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
   const isFeedShell = /^\/(feed|create|padi-manage|padi-manage-query)$/.test(location.pathname) || /^\/(post|edit|read|reserve)\/[^/]+$/.test(location.pathname);
-  const { setFilters } = useFilters();
+  const { filters, setFilters } = useFilters();
+  const [searchTitle, setSearchTitle] = useState(filters?.title || '');
   const isStockManagerPage = location.pathname === '/padi-manage';
   const isQueryPage = location.pathname === '/padi-manage-query';
   const queryParams = new URLSearchParams(location.search);
@@ -22,6 +23,10 @@ export default function AppLayout() {
   const initialFilters = React.useMemo(() => Object.fromEntries(new URLSearchParams(location.search).entries()), [location.search]);
 
   const profileId = user?.id || user?._id || null;
+
+  useEffect(() => {
+    setSearchTitle(filters?.title || '');
+  }, [filters?.title]);
 
   const handleLogout = () => {
     logout();
@@ -32,12 +37,33 @@ export default function AppLayout() {
     navigate(`/padi-manage-query?section=${encodeURIComponent(section)}`);
   };
 
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setFilters((prev) => ({ ...prev, title: searchTitle }));
+    if (location.pathname !== '/feed') {
+      navigate('/feed');
+    }
+  };
+
   return (
     <div className="app-shell">
       <header className="top-bar">
         <NavLink to="/" className="brand">
           PadiBridge
         </NavLink>
+
+        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', margin: '0 1rem', flex: 1, maxWidth: '400px' }}>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '1.1rem', pointerEvents: 'none' }} aria-hidden="true">🔍</span>
+            <input 
+              type="search" 
+              placeholder="Search posts by title..." 
+              value={searchTitle} 
+              onChange={(e) => setSearchTitle(e.target.value)}
+              style={{ width: '100%', padding: '0.5rem 2.5rem 0.5rem 1rem', borderRadius: '9999px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem' }}
+            />
+          </div>
+        </form>
 
         <nav className="nav-items" aria-label="Main Navigation">
           {!isAuthenticated ? (
@@ -55,17 +81,30 @@ export default function AppLayout() {
             </>
           ) : (
             <>
+              <NavLink 
+                to="/create" 
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  backgroundColor: '#16a34a',
+                  color: '#fff',
+                  padding: '0.4rem 1.25rem',
+                  borderRadius: '9999px',
+                  textDecoration: 'none',
+                  fontWeight: '500',
+                  marginRight: '0.5rem'
+                }}
+              >
+                Create Post
+              </NavLink>
               <NavLink to="/feed" className={navClass}>
                 Home
               </NavLink>
               {profileId && (
                 <NavLink to={`/profile/${profileId}`} className={navClass}>
-                  Profile
+                  {user?.username ? `@${user.username}` : 'Profile'}
                 </NavLink>
               )}
-              <NavLink to="/create" className={navClass}>
-                Create Post
-              </NavLink>
               <button type="button" className="logout-btn" onClick={handleLogout}>
                 Logout
               </button>

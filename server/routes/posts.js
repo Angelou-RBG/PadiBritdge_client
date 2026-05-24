@@ -8,7 +8,7 @@ const { upload, parseTagIds, cleanupUploadedFiles, loadPostImages, insertPostIma
 const router = express.Router()
 
 router.get('/api/posts', (request, response) => {
-    const { limit: qLimit, offset: qOffset, postType, tags, startDate, endDate } = request.query
+    const { limit: qLimit, offset: qOffset, postType, tags, startDate, endDate, title } = request.query
 
     const limit = Math.min(Math.max(Number(qLimit) || 15, 1), 50)
     const offset = Math.max(Number(qOffset) || 0, 0)
@@ -39,6 +39,11 @@ router.get('/api/posts', (request, response) => {
     if (endDate) {
         whereClauses.push('DATE(posts.date_created) <= DATE(?)')
         queryParams.push(endDate)
+    }
+
+    if (title) {
+        whereClauses.push('LOWER(posts.title) LIKE ?')
+        queryParams.push(`%${title.toLowerCase()}%`)
     }
 
     const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''

@@ -37,6 +37,7 @@ function buildFeedDefaults(contextFilters, initialFilters) {
         tags: initialFilters.tags || contextFilters.tags || '',
         startDate: initialFilters.startDate || contextFilters.startDate || '',
         endDate: initialFilters.endDate || contextFilters.endDate || '',
+        title: initialFilters.title || contextFilters.title || '',
     };
 }
 
@@ -167,6 +168,7 @@ export default function SearchFilter({ onFilterChange, mode = 'feed', initialFil
                 tags: '',
                 startDate: '',
                 endDate: '',
+                title: '',
             };
 
         setFilters(resetFilters);
