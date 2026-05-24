@@ -11,6 +11,8 @@ export default function EditProfile() {
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [profilePicture, setProfilePicture] = useState(null);
+  const [removeProfilePicture, setRemoveProfilePicture] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
 
@@ -33,11 +35,24 @@ export default function EditProfile() {
 
     try {
       setIsSubmitting(true);
-      const res = await updateProfile(user?.id || user?._id, {
-        fullName: fullName.trim(),
-        username: username.trim(),
-        email: email.trim(),
-      });
+
+      let payload;
+      if (profilePicture || removeProfilePicture) {
+        payload = new FormData();
+        payload.append('fullName', fullName.trim());
+        payload.append('username', username.trim());
+        payload.append('email', email.trim());
+        if (profilePicture) payload.append('profilePicture', profilePicture);
+        if (removeProfilePicture) payload.append('removeProfilePicture', 'true');
+      } else {
+        payload = {
+          fullName: fullName.trim(),
+          username: username.trim(),
+          email: email.trim(),
+        };
+      }
+
+      const res = await updateProfile(user?.id || user?._id, payload);
 
       // Update auth context so profile reflects changes immediately
       if (res?.user) {
@@ -77,6 +92,47 @@ export default function EditProfile() {
       <NotificationBean type={notification?.type} message={notification?.message} />
 
       <form className="form-shell" onSubmit={handleSubmit}>
+        <label htmlFor="edit-profile-picture">Profile Picture</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+          {(user?.profilePicture && !removeProfilePicture) || profilePicture ? (
+            <img 
+              src={profilePicture ? URL.createObjectURL(profilePicture) : `/uploads/${user.profilePicture}`} 
+              alt="Profile Preview" 
+              style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }} 
+            />
+          ) : (
+            <div style={{ width: '60px', height: '60px', borderRadius: '50%', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+              No Pic
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <input
+              id="edit-profile-picture"
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                setProfilePicture(event.target.files[0] || null);
+                setRemoveProfilePicture(false);
+              }}
+              disabled={isSubmitting}
+            />
+            {(user?.profilePicture && !removeProfilePicture) || profilePicture ? (
+              <button 
+                type="button" 
+                className="ghost-btn" 
+                style={{ alignSelf: 'flex-start', padding: '0.2rem 0.5rem', fontSize: '0.8rem', color: '#ef4444' }} 
+                onClick={() => {
+                  setProfilePicture(null);
+                  setRemoveProfilePicture(true);
+                  document.getElementById('edit-profile-picture').value = '';
+                }}
+              >
+                Remove Picture
+              </button>
+            ) : null}
+          </div>
+        </div>
+
         <label htmlFor="edit-fullname">Full Name</label>
         <input
           id="edit-fullname"

@@ -15,7 +15,7 @@ const FILTER_LABELS = {
 export default function Feed() {
   const location = useLocation();
   const flash = location.state?.flash;
-  const { filters, setFilters } = useFilters();
+  const { filters, setFilters, globalTags } = useFilters();
 
   const hasActiveFilters = Object.values(filters || {}).some(Boolean);
 
@@ -42,7 +42,7 @@ export default function Feed() {
                 fontSize: '0.85rem',
                 fontWeight: '500'
               }}>
-                {FILTER_LABELS[key] || key}: {value}
+                {FILTER_LABELS[key] || key}: {key === 'tags' && globalTags?.length ? (globalTags.find(t => String(t.id) === String(value))?.name || value) : value}
                 <button
                   type="button"
                   onClick={() => clearFilter(key)}

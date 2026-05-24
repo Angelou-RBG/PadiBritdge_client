@@ -23,6 +23,7 @@ function buildUserRow(user) {
         fullName: user.full_name,
         email: user.email,
         userType: user.user_type || 'basic',
+        profilePicture: user.profile_picture || null,
     }
 }
 
@@ -129,9 +130,23 @@ function initializeDatabase(callback) {
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                user_type TEXT NOT NULL DEFAULT 'basic'
+                user_type TEXT NOT NULL DEFAULT 'basic',
+                profile_picture TEXT
             )
         `, handleErr('users'))
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS addresses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                street TEXT NOT NULL,
+                city TEXT NOT NULL,
+                province TEXT NOT NULL,
+                zip_code TEXT NOT NULL,
+                is_default INTEGER DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        `, handleErr('addresses'))
 
         db.run(`
             CREATE TABLE IF NOT EXISTS posts (
@@ -143,6 +158,7 @@ function initializeDatabase(callback) {
                 status TEXT NOT NULL DEFAULT 'not',
                 text_body TEXT NOT NULL,
                 attachment_type TEXT DEFAULT 'none',
+                address_id INTEGER,
                 date_created TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
@@ -344,6 +360,10 @@ function initializeDatabase(callback) {
             if (!existingColumns.has('attachment_type')) {
                 db.run(`ALTER TABLE posts ADD COLUMN attachment_type TEXT DEFAULT 'none'`, handleErr('posts'))
             }
+            
+            if (!existingColumns.has('address_id')) {
+                db.run(`ALTER TABLE posts ADD COLUMN address_id INTEGER`, handleErr('posts'))
+            }
         })
 
         db.all(`PRAGMA table_info(users)`, (err, columns) => {
@@ -357,6 +377,18 @@ function initializeDatabase(callback) {
                         db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)`, handleErr('users'))
                     })
                 })
+            }
+            
+            if (!existingColumns.has('profile_picture')) {
+                db.run(`ALTER TABLE users ADD COLUMN profile_picture TEXT`, handleErr('users'))
+            }
+        })
+
+        db.all(`PRAGMA table_info(addresses)`, (err, columns) => {
+            if (err) return handleErr('addresses')(err)
+            const existingColumns = new Set((columns || []).map((column) => column.name))
+            if (!existingColumns.has('is_default')) {
+                db.run(`ALTER TABLE addresses ADD COLUMN is_default INTEGER DEFAULT 0`, handleErr('addresses'))
             }
         })
 

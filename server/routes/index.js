@@ -6,6 +6,7 @@ const postsRoutes = require('./posts')
 const stockRoutes = require('./stock')
 const ordersRoutes = require('./orders')
 const externalRfqRoutes = require('./externalRfqs')
+const addressesRoutes = require('./addresses')
 
 const router = express.Router()
 
@@ -15,5 +16,6 @@ router.use(postsRoutes)
 router.use(stockRoutes)
 router.use(ordersRoutes)
 router.use(externalRfqRoutes)
+router.use(addressesRoutes)
 
 module.exports = router

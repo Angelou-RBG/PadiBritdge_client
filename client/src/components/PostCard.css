@@ -11,9 +11,7 @@
 }
 
 .post-card-header > div:first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem; /* Reduces gap between the Title and the User name */
+  /* Removed to avoid layout conflicts with avatar wrappers */
 }
 
 .post-card-title {

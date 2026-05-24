@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { addComment } from '../services/api';
+import { addComment, baseURL } from '../services/api';
 import FloatingDropdown from './FloatingDropdown';
 import './CommentCell.css';
 
@@ -11,6 +11,7 @@ export default function CommentCell({ postId, comment, allComments = [], onComme
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const replies = allComments.filter(c => c.replying_to === comment.comment_id);
+    const pfp = comment?.profile_picture || comment?.profilePicture;
 
     const dropdownItems = [
         // Empty for now as requested
@@ -65,8 +66,16 @@ export default function CommentCell({ postId, comment, allComments = [], onComme
     return (
         <div className="comment-cell">
             <div className="comment-cell-main">
-                <p className="comment-author">{comment.full_name || 'Anonymous'}</p>
-                <p className="comment-content">{comment.content}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                    {pfp ? (
+                        <img src={`${baseURL}/uploads/${pfp}`} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>👤</div>
+                    )}
+                    <p className="comment-author" style={{ margin: 0 }}>{comment.full_name || 'Anonymous'}</p>
+                    {comment.username && <span style={{ color: '#64748b', fontSize: '0.85rem' }}>@{comment.username}</span>}
+                </div>
+                <p className="comment-content" style={{ marginTop: '0.25rem' }}>{comment.content}</p>
                 <div className="comment-actions">
                     <button type="button" className="primary-btn" onClick={handleReplyClick}>
                         {isReplying ? 'Cancel' : 'Reply'}

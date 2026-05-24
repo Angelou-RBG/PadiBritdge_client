@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createPost, getPostTypes, getTags } from '../services/api';
+import { createPost, getPostTypes, getTags, getAddresses } from '../services/api';
 import NotificationBean from '../components/NotificationBean';
 import { getTagStyle } from '../utils/tagTheme';
 import './Create.css';
@@ -20,17 +20,24 @@ export default function Create() {
   const [textBody, setTextBody] = useState('');
   const [postTypes, setPostTypes] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
+  const [addresses, setAddresses] = useState([]);
+  const [addressId, setAddressId] = useState('');
   const [isLoadingLookups, setIsLoadingLookups] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
   const [attachmentType, setAttachmentType] = useState('none');
+  const [showLocation, setShowLocation] = useState(false);
 
   useEffect(() => {
     let isActive = true;
 
     async function loadLookups() {
       try {
-        const [postTypesResponse, tagsResponse] = await Promise.all([getPostTypes(), getTags()]);
+        const [postTypesResponse, tagsResponse, addressesResponse] = await Promise.all([
+          getPostTypes(), 
+          getTags(),
+          user?.id ? getAddresses(user.id) : Promise.resolve([])
+        ]);
 
         if (!isActive) {
           return;
@@ -38,6 +45,12 @@ export default function Create() {
 
         setPostTypes(Array.isArray(postTypesResponse?.postTypes) ? postTypesResponse.postTypes : []);
         setAvailableTags(Array.isArray(tagsResponse?.tags) ? tagsResponse.tags : []);
+        
+        const userAddresses = Array.isArray(addressesResponse) ? addressesResponse : [];
+        setAddresses(userAddresses);
+        const defaultAddress = userAddresses.find(a => a.isDefault);
+        if (defaultAddress) setAddressId(String(defaultAddress.id));
+
       } catch (error) {
         if (isActive) {
           setNotification({ type: 'error', message: error.response?.data?.message || 'Something went Wrong' });
@@ -134,6 +147,7 @@ export default function Create() {
       formData.append('tagIds', JSON.stringify(selectedTagIds.map((tagId) => Number(tagId))));
       formData.append('textBody', textBody.trim());
       formData.append('attachmentType', attachmentType);
+      if (showLocation && addressId) formData.append('addressId', addressId);
 
       selectedImages.forEach((file) => {
         formData.append('images', file);
@@ -254,19 +268,54 @@ export default function Create() {
           </label>
         </div>
 
-        {selectedPostType?.name === 'PadiConnect' ? (
-          <div className="create-field" style={{ marginBottom: '1rem' }}>
-            <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={attachmentType === 'stock_listing'}
-                onChange={(e) => setAttachmentType(e.target.checked ? 'stock_listing' : 'none')}
-                disabled={isLoadingLookups || isSubmitting}
-              />
-              Show stock listing table
-            </label>
-          </div>
-        ) : null}
+    <div className="create-field" style={{ marginBottom: '0.5rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+      {addresses.length > 0 && (
+        <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={showLocation}
+            onChange={(e) => {
+              setShowLocation(e.target.checked);
+              if (e.target.checked && !addressId) {
+                const defaultAddress = addresses.find(a => a.isDefault) || addresses[0];
+                if (defaultAddress) setAddressId(String(defaultAddress.id));
+              }
+            }}
+            disabled={isLoadingLookups || isSubmitting}
+          />
+          Add a location to this post
+        </label>
+      )}
+
+      {selectedPostType?.name === 'PadiConnect' ? (
+        <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={attachmentType === 'stock_listing'}
+            onChange={(e) => setAttachmentType(e.target.checked ? 'stock_listing' : 'none')}
+            disabled={isLoadingLookups || isSubmitting}
+          />
+          Show stock listing table
+        </label>
+      ) : null}
+    </div>
+
+    {showLocation && addresses.length > 0 && (
+      <label className="create-field" style={{ marginBottom: '1rem' }}>
+        <span className="create-label">Location</span>
+        <select
+          value={addressId}
+          onChange={(event) => setAddressId(event.target.value)}
+          disabled={isLoadingLookups || isSubmitting}
+        >
+          {addresses.map((addr) => (
+            <option key={addr.id} value={addr.id}>
+              {addr.street}, {addr.city}, {addr.province} {addr.isDefault ? '(Default)' : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+    )}
 
         <label className="create-field">
           <span className="create-label">Images</span>

@@ -58,9 +58,16 @@ router.get('/api/posts', (request, response) => {
             posts.text_body,
             posts.attachment_type,
             posts.date_created,
-            users.full_name
+            posts.address_id,
+            users.full_name,
+            users.username,
+            users.profile_picture,
+            addresses.street,
+            addresses.city,
+            addresses.province
          FROM posts
          INNER JOIN users ON users.id = posts.user_id
+         LEFT JOIN addresses ON addresses.id = posts.address_id
          ${whereString}
          ORDER BY posts.date_created DESC, posts.post_id DESC
          LIMIT ? OFFSET ?`
@@ -97,9 +104,16 @@ router.get('/api/posts/latest', (request, response) => {
             posts.text_body,
             posts.attachment_type,
             posts.date_created,
-            users.full_name
+            posts.address_id,
+            users.full_name,
+            users.username,
+            users.profile_picture,
+            addresses.street,
+            addresses.city,
+            addresses.province
          FROM posts
          INNER JOIN users ON users.id = posts.user_id
+         LEFT JOIN addresses ON addresses.id = posts.address_id
          ORDER BY posts.date_created DESC, posts.post_id DESC
          LIMIT 1`,
         (error, row) => {
@@ -142,9 +156,16 @@ router.get('/api/posts/:id', (request, response) => {
             posts.text_body,
             posts.attachment_type,
             posts.date_created,
-            users.full_name
+            posts.address_id,
+            users.full_name,
+            users.username,
+            users.profile_picture,
+            addresses.street,
+            addresses.city,
+            addresses.province
          FROM posts
          INNER JOIN users ON users.id = posts.user_id
+         LEFT JOIN addresses ON addresses.id = posts.address_id
          WHERE posts.post_id = ?`,
         [postId],
         (error, row) => {
@@ -195,7 +216,7 @@ router.get('/api/posts/:id/comments', (request, response) => {
         const commentSectionId = section.comment_section_id
 
         db.all(
-            `SELECT c.*, u.full_name, u.username
+            `SELECT c.*, u.full_name, u.username, u.profile_picture
              FROM comments c
              JOIN users u ON c.user_id = u.id
              WHERE c.comment_section_id = ?
@@ -264,7 +285,7 @@ router.post('/api/posts/:id/comments', (request, response) => {
 
             const newCommentId = this.lastID
 
-            db.get('SELECT c.*, u.full_name, u.username FROM comments c JOIN users u ON c.user_id = u.id WHERE c.comment_id = ?', [newCommentId], (fetchError, newComment) => {
+            db.get('SELECT c.*, u.full_name, u.username, u.profile_picture FROM comments c JOIN users u ON c.user_id = u.id WHERE c.comment_id = ?', [newCommentId], (fetchError, newComment) => {
                 if (fetchError) {
                     return response.status(201).json({ comment: { id: newCommentId } })
                 }
@@ -337,7 +358,7 @@ router.put('/api/posts/:id', (request, response) => {
             return response.status(400).json({ message: 'Valid post id is required.' })
         }
 
-        const { title, postTypeId, tagIds, textBody, attachmentType, retainedImageIds } = request.body || {}
+        const { title, postTypeId, tagIds, textBody, attachmentType, retainedImageIds, addressId, removeAddress } = request.body || {}
         const normalizedTitle = String(title || '').trim()
         const normalizedTextBody = String(textBody || '').trim()
         const normalizedPostTypeId = Number(postTypeId)
@@ -360,7 +381,8 @@ router.put('/api/posts/:id', (request, response) => {
             `SELECT
                 posts.post_id,
                 posts.user_id,
-                posts.status
+                posts.status,
+                posts.address_id
              FROM posts
              WHERE posts.post_id = ?`,
             [postId],
@@ -402,16 +424,14 @@ router.put('/api/posts/:id', (request, response) => {
                             const placeholders = normalizedTagIds.map(() => '?').join(', ')
 
                             db.all(
-                                `SELECT id, name FROM tags WHERE id IN (${placeholders})`,
+                                `SELECT id FROM tags WHERE id IN (${placeholders})`,
                                 normalizedTagIds,
                                 (tagsError, rows) => {
                                     if (tagsError) return callback(tagsError)
                                     if (!rows || rows.length !== normalizedTagIds.length) {
                                         return callback(new Error('One or more selected tags are invalid.'))
                                     }
-                                    const tagById = new Map(rows.map((row) => [row.id, row.name]))
-                                    const resolvedTags = normalizedTagIds.map((tagId) => tagById.get(tagId)).filter(Boolean)
-                                    return callback(null, resolvedTags.join(', '))
+                                    return callback(null, normalizedTagIds.join(','))
                                 }
                             )
                         }
@@ -431,11 +451,18 @@ router.put('/api/posts/:id', (request, response) => {
                                     return sendDatabaseError(response, beginError)
                                 }
 
+                                let finalAddressId = postRow.address_id;
+                                if (removeAddress === 'true') {
+                                    finalAddressId = null;
+                                } else if (addressId) {
+                                    finalAddressId = Number(addressId);
+                                }
+
                                 db.run(
                                     `UPDATE posts
-                                     SET title = ?, post_type = ?, tags = ?, text_body = ?, attachment_type = ?
+                                     SET title = ?, post_type = ?, tags = ?, text_body = ?, attachment_type = ?, address_id = ?
                                      WHERE post_id = ?`,
-                                    [normalizedTitle, postTypeRow.name, tagValue, normalizedTextBody, normalizedAttachmentType, postId],
+                                    [normalizedTitle, postTypeRow.name, tagValue, normalizedTextBody, normalizedAttachmentType, finalAddressId, postId],
                                     (updateError) => {
                                         if (updateError) {
                                             cleanupUploadedFiles(request.files || [])
@@ -495,7 +522,7 @@ router.put('/api/posts/:id', (request, response) => {
                                                                 userId: postRow.user_id,
                                                                 title: normalizedTitle,
                                                                 postType: postTypeRow.name,
-                                                                tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
+                                                                tags: tagValue ? tagValue.split(',').filter(Boolean) : [],
                                                                 status: postRow.status,
                                                                 textBody: normalizedTextBody,
                                                                 attachmentType: normalizedAttachmentType,
@@ -537,13 +564,14 @@ router.post('/api/posts', (request, response) => {
         }
 
         const uploadedFiles = Array.isArray(request.files) ? request.files : []
-        const { userId, title, postTypeId, tagIds, textBody, attachmentType } = request.body || {}
+        const { userId, title, postTypeId, tagIds, textBody, attachmentType, addressId } = request.body || {}
 
         const normalizedTitle = String(title || '').trim()
         const normalizedTextBody = String(textBody || '').trim()
         const normalizedUserId = Number(userId)
         const normalizedAttachmentType = String(attachmentType || 'none').trim()
         const normalizedPostTypeId = Number(postTypeId)
+        const finalAddressId = addressId ? Number(addressId) : null;
         const normalizedTagIds = parseTagIds(tagIds)
             .map((tagId) => Number(tagId))
             .filter((tagId) => Number.isInteger(tagId) && tagId > 0)
@@ -585,7 +613,7 @@ router.post('/api/posts', (request, response) => {
                     const placeholders = normalizedTagIds.map(() => '?').join(', ')
 
                     db.all(
-                        `SELECT id, name FROM tags WHERE id IN (${placeholders})`,
+                        `SELECT id FROM tags WHERE id IN (${placeholders})`,
                         normalizedTagIds,
                         (tagsError, rows) => {
                             if (tagsError) {
@@ -596,10 +624,7 @@ router.post('/api/posts', (request, response) => {
                                 return callback(new Error('One or more selected tags are invalid.'))
                             }
 
-                            const tagById = new Map(rows.map((row) => [row.id, row.name]))
-                            const resolvedTags = normalizedTagIds.map((tagId) => tagById.get(tagId)).filter(Boolean)
-
-                            return callback(null, resolvedTags.join(', '))
+                            return callback(null, normalizedTagIds.join(','))
                         }
                     )
                 }
@@ -622,8 +647,8 @@ router.post('/api/posts', (request, response) => {
                         }
 
                         db.run(
-                            'INSERT INTO posts (user_id, title, post_type, tags, status, text_body, attachment_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                            [normalizedUserId, normalizedTitle, postTypeRow.name, tagValue, 'not', normalizedTextBody, normalizedAttachmentType],
+                            'INSERT INTO posts (user_id, title, post_type, tags, status, text_body, attachment_type, address_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                            [normalizedUserId, normalizedTitle, postTypeRow.name, tagValue, 'not', normalizedTextBody, normalizedAttachmentType, finalAddressId],
                             function (insertError) {
                                 if (insertError) {
                                     cleanupUploadedFiles(uploadedFiles)
@@ -670,10 +695,11 @@ router.post('/api/posts', (request, response) => {
                                                         userId: normalizedUserId,
                                                         title: normalizedTitle,
                                                         postType: postTypeRow.name,
-                                                        tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
+                                                        tags: tagValue ? tagValue.split(',').filter(Boolean) : [],
                                                         status: 'not',
                                                         textBody: normalizedTextBody,
                                                         attachmentType: normalizedAttachmentType,
+                                                        addressId: finalAddressId,
                                                         images: insertedImages,
                                                     },
                                                 })

@@ -5,25 +5,22 @@ import FloatingDropdown from '../components/FloatingDropdown';
 import DeletePostCard from '../components/DeletePostCard';
 import NotificationBean from '../components/NotificationBean';
 import { useAuth } from '../context/AuthContext';
-import { deletePost, getPost, getStockListings } from '../services/api';
+import { useFilters } from '../context/FilterContext';
+import { deletePost, getPost, getStockListings, getAddress, baseURL } from '../services/api';
 import { getTagStyle, normalizeTag } from '../utils/tagTheme';
 import MediaHandler from '../components/MediaHandler';
 import './Post.css';
 
-function formatTags(tags) {
-  if (Array.isArray(tags)) {
-    return tags.map((tag, index) => normalizeTag(tag, index));
-  }
-
-  if (typeof tags === 'string') {
-    return tags
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-      .map((tag, index) => normalizeTag(tag, index));
-  }
-
-  return [];
+function formatTags(tags, globalTags = []) {
+  const tagArray = Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
+  
+  return tagArray.map((tag, index) => {
+    const found = globalTags.find(t => String(t.id) === String(tag));
+    if (found) {
+      return { id: found.id, name: found.name, color: found.color };
+    }
+    return normalizeTag(tag, index);
+  });
 }
 
 function formatImages(images) {
@@ -40,17 +37,25 @@ function formatImages(images) {
     .filter((image) => Boolean(image.url));
 }
 
+function getPostTypeStyle(type) {
+  if (type === 'PadiConnect') return { backgroundColor: '#166534', color: '#ffffff', border: '1px solid #14532d' };
+  if (type === 'PadiSwap') return { backgroundColor: '#c2410c', color: '#ffffff', border: '1px solid #9a3412' };
+  return { backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' };
+}
+
 export default function Post() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
   const { user } = useAuth();
+  const { globalTags } = useFilters();
   const [post, setPost] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notification, setNotification] = useState(location.state?.flash || null);
   const [isDeleteCardOpen, setIsDeleteCardOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [millerStocks, setMillerStocks] = useState([]);
+  const [address, setAddress] = useState(null);
 
   useEffect(() => {
     let isActive = true;
@@ -64,6 +69,16 @@ export default function Post() {
         }
 
         setPost(data?.post || null);
+
+        const addressId = data?.post?.address_id || data?.post?.addressId;
+        if (addressId) {
+          try {
+            const addr = await getAddress(addressId);
+            if (isActive) setAddress(addr);
+          } catch (e) {
+            console.error('Failed to load address', e);
+          }
+        }
 
         if (data?.post?.postType === 'PadiConnect' && data?.post?.attachmentType === 'stock_listing') {
           try {
@@ -96,12 +111,13 @@ export default function Post() {
     };
   }, [id]);
 
-  const tagList = useMemo(() => formatTags(post?.tags), [post?.tags]);
+  const tagList = useMemo(() => formatTags(post?.tags, globalTags), [post?.tags, globalTags]);
   const imageList = useMemo(() => formatImages(post?.images), [post?.images]);
   const currentUserId = String(user?.id || user?._id || '');
   const postOwnerId = String(post?.user_id || post?.userId || '');
   const isCurrentUser = Boolean(currentUserId && postOwnerId && currentUserId === postOwnerId);
   const postId = String(post?.post_id || id || '');
+  const pfp = post?.profile_picture || post?.profilePicture;
   const isDeleted = post?.status === 'deleted';
   const isPadiConnect = post?.postType === 'PadiConnect';
 
@@ -233,18 +249,45 @@ export default function Post() {
 
       <NotificationBean type={notification?.type} message={notification?.message} />
 
-      <h2 className="post-page-title">{post?.title || 'Untitled Post'}</h2>
-      <p className="post-card-user">By {post?.user || 'Unknown user'}</p>
-      <div className="post-page-meta">
-        <p className="post-page-post-type">{post?.postType || 'No post type'}</p>
-        <div className="post-page-tags" aria-label="Post tags">
-          {tagList.length > 0 ? tagList.map((tag) => (
-            <span className="post-page-tag" key={tag.id} style={getTagStyle(tag.color)}>
-              {tag.name}
-            </span>
-          )) : (
-            <span className="post-page-tag post-page-tag-empty">No tags</span>
+      <h2 className="post-page-title" style={{ marginBottom: '0.05rem' }}>{post?.title || 'Untitled Post'}</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {pfp ? (
+            <img src={`${baseURL}/uploads/${pfp}`} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ width: '35px', height: '35px', borderRadius: '50%', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>👤</div>
           )}
+          <div>
+            <p className="post-card-user" style={{ margin: 0, fontSize: '0.9rem', fontWeight: '500' }}>By {post?.user || 'Unknown user'}</p>
+            {post?.username && <p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem' }}>@{post.username}</p>}
+          </div>
+        </div>
+
+        {address && (
+          <div style={{ color: '#475569', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+            <span>📍</span> {address.street}, {address.city}, {address.province}
+          </div>
+        )}
+
+        <div className="post-page-meta" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={{
+            padding: '0.2rem 0.6rem',
+            borderRadius: '9999px',
+            fontSize: '0.75rem',
+            fontWeight: '700',
+            ...getPostTypeStyle(post?.postType)
+          }}>
+            {post?.postType || 'Other'}
+          </span>
+          <div className="post-page-tags" aria-label="Post tags" style={{ margin: 0 }}>
+            {tagList.length > 0 ? tagList.map((tag) => (
+              <span className="post-page-tag" key={tag.id} style={getTagStyle(tag.color)}>
+                {tag.name}
+              </span>
+            )) : (
+              <span className="post-page-tag post-page-tag-empty">No tags</span>
+            )}
+          </div>
         </div>
       </div>
 

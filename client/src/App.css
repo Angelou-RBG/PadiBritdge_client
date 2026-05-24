@@ -374,7 +374,7 @@ a {
   margin: 18px 0;
 }
 
-.form-shell input {
+.form-shell input:not([type="checkbox"]) {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -384,6 +384,14 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--brand);
 }
 
 .error-text {

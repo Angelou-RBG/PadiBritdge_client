@@ -2,23 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getTagStyle, normalizeTag } from '../utils/tagTheme';
 import MediaHandler from './MediaHandler';
-import { getComments } from '../services/api';
+import { getComments, baseURL } from '../services/api';
+import { useFilters } from '../context/FilterContext';
 import './PostCard.css';
 
-function formatTags(tags) {
-  if (Array.isArray(tags)) {
-    return tags.map((tag, index) => normalizeTag(tag, index));
-  }
-
-  if (typeof tags === 'string') {
-    return tags
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-      .map((tag, index) => normalizeTag(tag, index));
-  }
-
-  return [];
+function formatTags(tags, globalTags = []) {
+  const tagArray = Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
+  
+  return tagArray.map((tag, index) => {
+    const found = globalTags.find(t => String(t.id) === String(tag));
+    if (found) {
+      return { id: found.id, name: found.name, color: found.color };
+    }
+    return normalizeTag(tag, index);
+  });
 }
 
 function formatImages(images) {
@@ -35,10 +32,18 @@ function formatImages(images) {
     .filter((image) => Boolean(image.url));
 }
 
+function getPostTypeStyle(type) {
+  if (type === 'PadiConnect') return { backgroundColor: '#166534', color: '#ffffff', border: '1px solid #14532d' };
+  if (type === 'PadiSwap') return { backgroundColor: '#c2410c', color: '#ffffff', border: '1px solid #9a3412' };
+  return { backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' };
+}
+
 export default function PostCard({ post, linkTo }) {
-  const tagList = formatTags(post?.tags);
+  const { globalTags } = useFilters();
+  const tagList = formatTags(post?.tags, globalTags);
   const imageList = formatImages(post?.images);
   const postId = post?.id || post?.post_id;
+  const pfp = post?.profile_picture || post?.profilePicture;
 
   const [commentCount, setCommentCount] = useState(0);
 
@@ -61,11 +66,27 @@ export default function PostCard({ post, linkTo }) {
   const card = (
     <article className="post-card">
       <header className="post-card-header">
-        <div>
-          <h2 className="post-card-title">{post?.title || 'Untitled Post'}</h2>
-          <p className="post-card-user">By {post?.user || 'Unknown user'}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {pfp ? (
+              <img src={`${baseURL}/uploads/${pfp}`} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+          ) : (
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>👤</div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+            <h2 className="post-card-title">{post?.title || 'Untitled Post'}</h2>
+            <p className="post-card-user">By {post?.user || post?.full_name || 'Unknown user'} {post?.username && <span style={{color: '#94a3b8'}}>@{post.username}</span>}</p>
+          </div>
         </div>
         <div className="post-card-tags" aria-label="Post tags">
+          <span style={{
+            padding: '0.2rem 0.6rem',
+            borderRadius: '9999px',
+            fontSize: '0.75rem',
+            fontWeight: '700',
+            ...getPostTypeStyle(post?.postType)
+          }}>
+            {post?.postType || 'Other'}
+          </span>
           {tagList.length > 0 ? tagList.map((tag) => (
             <span className="post-card-tag" key={tag.id} style={getTagStyle(tag.color)}>
               {tag.name}
@@ -75,6 +96,12 @@ export default function PostCard({ post, linkTo }) {
           )}
         </div>
       </header>
+
+      {(post?.street && post?.city && post?.province) && (
+        <div style={{ marginBottom: '0.25rem', marginTop: '0.25rem', color: '#475569', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+          <span>📍</span> {post.street}, {post.city}, {post.province}
+        </div>
+      )}
 
       <p className="post-card-body">{post?.textBody || 'No post body available.'}</p>
   

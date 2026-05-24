@@ -75,9 +75,8 @@ function buildHistoryDefaults(activeSection, initialFilters) {
 }
 
 export default function SearchFilter({ onFilterChange, mode = 'feed', initialFilters = {}, activeSection = 'inventory-logs' }) {
-    const { filters: contextFilters } = useFilters();
+    const { filters: contextFilters, globalTags } = useFilters();
     const [postTypes, setPostTypes] = useState([]);
-    const [tags, setTags] = useState([]);
     const [transactionTypes, setTransactionTypes] = useState([]);
     const [filters, setFilters] = useState(
         mode === 'feed'
@@ -139,9 +138,8 @@ export default function SearchFilter({ onFilterChange, mode = 'feed', initialFil
                     return;
                 }
 
-                const [postTypesData, tagsData] = await Promise.all([getPostTypes(), getTags()]);
+                const postTypesData = await getPostTypes();
                 setPostTypes(postTypesData.postTypes || []);
-                setTags(tagsData.tags || []);
             } catch (error) {
                 console.error('Failed to fetch filter data:', error);
             }
@@ -304,8 +302,8 @@ export default function SearchFilter({ onFilterChange, mode = 'feed', initialFil
                             <label htmlFor="tags" style={{ display: 'block', marginBottom: '0.25rem' }}>Tags</label>
                             <select id="tags" name="tags" value={filters.tags || ''} onChange={handleChange} style={{ width: '100%' }}>
                                 <option value="">All</option>
-                                {tags.map(tag => (
-                                    <option key={tag.id} value={tag.name}>{tag.name}</option>
+                                {(globalTags || []).map(tag => (
+                                    <option key={tag.id} value={tag.id}>{tag.name}</option>
                                 ))}
                             </select>
                         </div>

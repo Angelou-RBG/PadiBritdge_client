@@ -31,7 +31,7 @@
   color: var(--text);
 }
 
-.create-field input,
+.create-field input:not([type="checkbox"]),
 .create-field select,
 .create-field textarea {
   width: 100%;
@@ -48,7 +48,7 @@
   min-height: 160px;
 }
 
-.create-field input:focus,
+.create-field input:not([type="checkbox"]):focus,
 .create-field select:focus,
 .create-field textarea:focus {
   outline: 2px solid var(--brand-soft);

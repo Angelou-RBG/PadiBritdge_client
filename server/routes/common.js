@@ -76,6 +76,12 @@ function mapPostRow(row, images = []) {
         textBody: row.text_body,
         attachmentType: row.attachment_type || 'none',
         dateCreated: row.date_created,
+        addressId: row.address_id,
+        street: row.street,
+        city: row.city,
+        province: row.province,
+        username: row.username,
+        profilePicture: row.profile_picture,
         images,
     }
 }

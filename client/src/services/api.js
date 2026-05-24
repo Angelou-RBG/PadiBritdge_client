@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const baseURL = process.env.REACT_APP_API_BASE_URL || '';
+export const baseURL = process.env.REACT_APP_API_BASE_URL || '';
 
 const api = axios.create({
   baseURL,
@@ -50,8 +50,11 @@ export async function getPostTypes() {
   return response.data;
 }
 
+let tagsCache = null;
 export async function getTags() {
+  if (tagsCache) return tagsCache;
   const response = await api.get('/api/tags');
+  tagsCache = response.data;
   return response.data;
 }
 
@@ -226,13 +229,47 @@ export async function getTransactions(params) {
 
 // User Profile
 export async function updateProfile(userId, payload) {
-  const response = await api.put(`/api/users/${userId}`, payload);
+  const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData;
+  const response = await api.put(`/api/users/${userId}`, payload, isFormData
+    ? { headers: { 'Content-Type': 'multipart/form-data' } }
+    : undefined);
   return response.data;
 }
 
 // Transaction Types
 export async function getTransactionTypes() {
   const response = await api.get('/api/transaction-types');
+  return response.data;
+}
+
+// Addresses
+export async function getAddress(id) {
+  const response = await api.get(`/api/addresses/${id}`);
+  return response.data;
+}
+
+export async function getAddresses(userId) {
+  const response = await api.get('/api/addresses', { params: { userId } });
+  return response.data;
+}
+
+export async function createAddress(payload) {
+  const response = await api.post('/api/addresses', payload);
+  return response.data;
+}
+
+export async function updateAddress(id, payload) {
+  const response = await api.put(`/api/addresses/${id}`, payload);
+  return response.data;
+}
+
+export async function deleteAddress(id) {
+  const response = await api.delete(`/api/addresses/${id}`);
+  return response.data;
+}
+
+export async function setDefaultAddress(id, userId) {
+  const response = await api.put(`/api/addresses/${id}/default`, { userId });
   return response.data;
 }
 

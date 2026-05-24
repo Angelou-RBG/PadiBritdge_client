@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import NotificationBean from '../components/NotificationBean';
-import { updatePost, getPost, getPostTypes, getTags } from '../services/api';
+import { updatePost, getPost, getPostTypes, getTags, getAddresses } from '../services/api';
 import { getTagStyle } from '../utils/tagTheme';
+import { useAuth } from '../context/AuthContext';
 import './Create.css';
 
 const MAX_IMAGE_COUNT = 5;
@@ -11,6 +12,7 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 export default function Edit() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [postTypeId, setPostTypeId] = useState('');
   const [tagPickerValue, setTagPickerValue] = useState('');
@@ -19,6 +21,8 @@ export default function Edit() {
   const [post, setPost] = useState(null);
   const [postTypes, setPostTypes] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
+  const [addresses, setAddresses] = useState([]);
+  const [addressId, setAddressId] = useState('');
   const [isLoadingLookups, setIsLoadingLookups] = useState(true);
   const [isLoadingPost, setIsLoadingPost] = useState(true);
   const [hasHydratedForm, setHasHydratedForm] = useState(false);
@@ -27,13 +31,18 @@ export default function Edit() {
   const [attachmentType, setAttachmentType] = useState('none');
   const [existingImages, setExistingImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
+  const [showLocation, setShowLocation] = useState(false);
 
   useEffect(() => {
     let isActive = true;
 
     async function loadLookups() {
       try {
-        const [postTypesResponse, tagsResponse] = await Promise.all([getPostTypes(), getTags()]);
+        const [postTypesResponse, tagsResponse, addressesResponse] = await Promise.all([
+          getPostTypes(), 
+          getTags(),
+          user?.id ? getAddresses(user.id) : Promise.resolve([])
+        ]);
 
         if (!isActive) {
           return;
@@ -41,6 +50,7 @@ export default function Edit() {
 
         setPostTypes(Array.isArray(postTypesResponse?.postTypes) ? postTypesResponse.postTypes : []);
         setAvailableTags(Array.isArray(tagsResponse?.tags) ? tagsResponse.tags : []);
+        setAddresses(Array.isArray(addressesResponse) ? addressesResponse : []);
       } catch (error) {
         if (isActive) {
           setNotification({ type: 'error', message: error.response?.data?.message || 'Something went Wrong' });
@@ -103,15 +113,16 @@ export default function Edit() {
     setTextBody(post.textBody || '');
     setAttachmentType(post.attachmentType || 'none');
     setExistingImages(post.images || []);
+    
+    const initialAddressId = post.address_id ? String(post.address_id) : (post.addressId ? String(post.addressId) : '');
+    setAddressId(initialAddressId);
+    setShowLocation(Boolean(initialAddressId));
 
     const matchedPostType = postTypes.find((option) => option.name === post.postType);
     setPostTypeId(matchedPostType ? String(matchedPostType.id) : '');
 
     const nextTagIds = Array.isArray(post.tags)
-      ? post.tags
-          .map((tagName) => availableTags.find((option) => option.name === tagName))
-          .filter(Boolean)
-          .map((tag) => String(tag.id))
+      ? post.tags.map(String)
       : [];
 
     setSelectedTagIds(nextTagIds);
@@ -195,6 +206,8 @@ export default function Edit() {
       formData.append('textBody', textBody.trim());
       formData.append('attachmentType', attachmentType);
       formData.append('retainedImageIds', JSON.stringify(existingImages.map(img => img.id)));
+      if (showLocation && addressId) formData.append('addressId', addressId);
+      if (!showLocation || !addressId) formData.append('removeAddress', 'true');
 
       selectedImages.forEach((file) => {
         formData.append('images', file);
@@ -330,19 +343,54 @@ export default function Edit() {
           </label>
         </div>
 
-        {selectedPostType?.name === 'PadiConnect' ? (
-          <div className="create-field" style={{ marginBottom: '1rem' }}>
-            <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={attachmentType === 'stock_listing'}
-                onChange={(e) => setAttachmentType(e.target.checked ? 'stock_listing' : 'none')}
-                disabled={isLoadingLookups || isLoadingPost || isSubmitting}
-              />
-              Show stock listing table
-            </label>
-          </div>
-        ) : null}
+    <div className="create-field" style={{ marginBottom: '0.5rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+      {addresses.length > 0 && (
+        <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={showLocation}
+            onChange={(e) => {
+              setShowLocation(e.target.checked);
+              if (e.target.checked && !addressId) {
+                const defaultAddress = addresses.find(a => a.isDefault) || addresses[0];
+                if (defaultAddress) setAddressId(String(defaultAddress.id));
+              }
+            }}
+            disabled={isLoadingLookups || isLoadingPost || isSubmitting}
+          />
+          Add a location to this post
+        </label>
+      )}
+
+      {selectedPostType?.name === 'PadiConnect' ? (
+        <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={attachmentType === 'stock_listing'}
+            onChange={(e) => setAttachmentType(e.target.checked ? 'stock_listing' : 'none')}
+            disabled={isLoadingLookups || isLoadingPost || isSubmitting}
+          />
+          Show stock listing table
+        </label>
+      ) : null}
+    </div>
+
+    {showLocation && addresses.length > 0 && (
+      <label className="create-field" style={{ marginBottom: '1rem' }}>
+        <span className="create-label">Location</span>
+        <select
+          value={addressId}
+          onChange={(event) => setAddressId(event.target.value)}
+          disabled={isLoadingLookups || isLoadingPost || isSubmitting}
+        >
+          {addresses.map((addr) => (
+            <option key={addr.id} value={addr.id}>
+              {addr.street}, {addr.city}, {addr.province} {addr.isDefault ? '(Default)' : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+    )}
 
         <label className="create-field">
           <span className="create-label">Images</span>

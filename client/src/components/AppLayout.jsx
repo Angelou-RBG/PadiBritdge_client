@@ -49,7 +49,7 @@ export default function AppLayout() {
     <div className="app-shell">
       <header className="top-bar">
         <NavLink to="/" className="brand">
-          PadiBridge
+          PadiBridge 🌾
         </NavLink>
 
         <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', margin: '0 1rem', flex: 1, maxWidth: '400px' }}>
@@ -101,7 +101,10 @@ export default function AppLayout() {
                 Home
               </NavLink>
               {profileId && (
-                <NavLink to={`/profile/${profileId}`} className={navClass}>
+                <NavLink to={`/profile/${profileId}`} className={navClass} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {user?.profilePicture && (
+                    <img src={`/uploads/${user.profilePicture}`} alt="Avatar" style={{ width: '35px', height: '35px', borderRadius: '50%', objectFit: 'cover' }} />
+                  )}
                   {user?.username ? `@${user.username}` : 'Profile'}
                 </NavLink>
               )}
