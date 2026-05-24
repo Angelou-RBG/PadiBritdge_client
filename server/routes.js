@@ -971,7 +971,7 @@ router.get('/api/stock-listings', (request, response) => {
 
 router.put('/api/stock-listings/:id', (request, response) => {
     const stockId = Number(request.params.id)
-    const { userId, physicalSacks, allocatedSacks, wholesalePrice, referenceId } = request.body || {}
+    const { userId, physicalSacks, allocatedSacks, wholesalePrice, referenceId, timestamp } = request.body || {}
 
     if (!Number.isInteger(stockId) || stockId <= 0) {
         return response.status(400).json({ message: 'Valid stock id is required.' })
@@ -1016,11 +1016,18 @@ router.put('/api/stock-listings/:id', (request, response) => {
 
             if (physicalChange !== 0) {
                 db.run(
-                    `INSERT INTO inventory_logs (user_id, variety_id, transaction_type, quantity_change, reference_id) VALUES (?, ?, ?, ?, ?)`,
-                    [userId, currentStock.variety_id, 'MANUAL_CORRECTION', physicalChange, referenceId || 'MODIFICATION'],
-                    (insertError) => {
-                        if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
-                        updateStock()
+                    `INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+                    [userId, 'MANUAL_CORRECTION', referenceId || 'MODIFICATION', null, timestamp || null],
+                    function (txError) {
+                        if (txError) return db.run('ROLLBACK', () => sendDatabaseError(response, txError))
+                        db.run(
+                            `INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`,
+                            [this.lastID, currentStock.variety_id, physicalChange],
+                            (insertError) => {
+                                if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
+                                updateStock()
+                            }
+                        )
                     }
                 )
             } else {
@@ -1061,28 +1068,31 @@ router.get('/api/inventory-logs', (request, response) => {
     let sql = `
         SELECT 
             il.log_id,
-            il.user_id,
+            t.transaction_id,
+            t.user_id,
             il.variety_id,
-            il.transaction_type,
+            t.transaction_type,
             il.quantity_change,
-            il.reference_id,
-            il.timestamp,
+            t.reference_id,
+            t.timestamp,
+            t.customer_id,
             rv.name AS variety_name,
             rv.quality_grade,
             tt.category,
             tt.quantity_direction
         FROM inventory_logs il
+        INNER JOIN transactions t ON il.transaction_id = t.transaction_id
         LEFT JOIN rice_varieties rv ON il.variety_id = rv.variety_id
-        LEFT JOIN transaction_types tt ON il.transaction_type = tt.type_name
+        LEFT JOIN transaction_types tt ON t.transaction_type = tt.type_name
     `
     
     const params = []
     if (userId) {
-        sql += ` WHERE il.user_id = ?`
+        sql += ` WHERE t.user_id = ?`
         params.push(Number(userId))
     }
     
-    sql += ` ORDER BY il.timestamp DESC`
+    sql += ` ORDER BY t.timestamp DESC`
 
     db.all(sql, params, (error, rows) => {
         if (error) {
@@ -1102,19 +1112,22 @@ router.get('/api/inventory-logs/:id', (request, response) => {
     db.get(
         `SELECT 
             il.log_id,
-            il.user_id,
+            t.transaction_id,
+            t.user_id,
             il.variety_id,
-            il.transaction_type,
+            t.transaction_type,
             il.quantity_change,
-            il.reference_id,
-            il.timestamp,
+            t.reference_id,
+            t.timestamp,
+            t.customer_id,
             rv.name AS variety_name,
             rv.quality_grade,
             tt.category,
             tt.quantity_direction
         FROM inventory_logs il
+        INNER JOIN transactions t ON il.transaction_id = t.transaction_id
         LEFT JOIN rice_varieties rv ON il.variety_id = rv.variety_id
-        LEFT JOIN transaction_types tt ON il.transaction_type = tt.type_name
+        LEFT JOIN transaction_types tt ON t.transaction_type = tt.type_name
         WHERE il.log_id = ?`,
         [logId],
         (error, row) => {
@@ -1130,7 +1143,7 @@ router.get('/api/inventory-logs/:id', (request, response) => {
 })
 
 router.post('/api/inventory-logs', (request, response) => {
-    const { userId, varietyId, transactionType, quantityChange, referenceId } = request.body || {}
+    const { userId, varietyId, transactionType, quantityChange, referenceId, customerId, timestamp } = request.body || {}
 
     if (!userId || !varietyId || !transactionType || quantityChange === undefined) {
         return response.status(400).json({ message: 'Missing required fields for inventory log.' })
@@ -1156,24 +1169,33 @@ router.post('/api/inventory-logs', (request, response) => {
             if (beginError) return sendDatabaseError(response, beginError)
 
             db.run(
-                `INSERT INTO inventory_logs (user_id, variety_id, transaction_type, quantity_change, reference_id) VALUES (?, ?, ?, ?, ?)`,
-                [userId, varietyId, transactionType, actualChange, referenceId || ''],
-                function (insertError) {
-                    if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
-                    const logId = this.lastID
+                `INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+                [userId, transactionType, referenceId || '', customerId || null, timestamp || null],
+                function (txError) {
+                    if (txError) return db.run('ROLLBACK', () => sendDatabaseError(response, txError))
+                    const transactionId = this.lastID
 
                     db.run(
-                        `INSERT INTO stock_listing (user_id, variety_id, physical_sacks, allocated_sacks, wholesale_price)
-                         VALUES (?, ?, MAX(0, ?), 0, 0.0)
-                         ON CONFLICT(user_id, variety_id) DO UPDATE SET
-                         physical_sacks = MAX(0, physical_sacks + ?), last_updated = datetime('now', 'localtime')`,
-                        [userId, varietyId, actualChange, actualChange],
-                        (upsertError) => {
-                            if (upsertError) return db.run('ROLLBACK', () => sendDatabaseError(response, upsertError))
-                            db.run('COMMIT', (commitError) => {
-                                if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
-                                return response.status(201).json({ logId })
-                            })
+                        `INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`,
+                        [transactionId, varietyId, actualChange],
+                        function (insertError) {
+                            if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
+                            const logId = this.lastID
+
+                            db.run(
+                                `INSERT INTO stock_listing (user_id, variety_id, physical_sacks, allocated_sacks, wholesale_price)
+                                 VALUES (?, ?, MAX(0, ?), 0, 0.0)
+                                 ON CONFLICT(user_id, variety_id) DO UPDATE SET
+                                 physical_sacks = MAX(0, physical_sacks + ?), last_updated = datetime('now', 'localtime')`,
+                                [userId, varietyId, actualChange, actualChange],
+                                (upsertError) => {
+                                    if (upsertError) return db.run('ROLLBACK', () => sendDatabaseError(response, upsertError))
+                                    db.run('COMMIT', (commitError) => {
+                                        if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                                        return response.status(201).json({ logId })
+                                    })
+                                }
+                            )
                         }
                     )
                 }
@@ -1183,39 +1205,66 @@ router.post('/api/inventory-logs', (request, response) => {
 })
 
 router.post('/api/order-rfqs', (request, response) => {
-    const { buyerId, millerId, varietyId, requestedSacks, fulfillmentDeadline } = request.body || {}
+    const { buyerId, millerId, items, fulfillmentDeadline } = request.body || {}
 
-    if (!buyerId || !millerId || !varietyId || requestedSacks === undefined || !fulfillmentDeadline) {
+    if (!buyerId || !millerId || !items || !items.length || !fulfillmentDeadline) {
         return response.status(400).json({ message: 'Missing required fields for allocation request.' })
     }
 
-    const sacks = Number(requestedSacks)
-    if (!Number.isInteger(sacks) || sacks <= 0) {
-        return response.status(400).json({ message: 'Requested sacks must be a positive integer.' })
-    }
+    db.run('BEGIN TRANSACTION', (beginError) => {
+        if (beginError) return sendDatabaseError(response, beginError)
+        db.run(
+            `INSERT INTO order_rfqs (buyer_id, miller_id, fulfillment_deadline, status) VALUES (?, ?, ?, 'Pending')`,
+            [buyerId, millerId, fulfillmentDeadline],
+            function (insertError) {
+                if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
+                const orderId = this.lastID
 
-    db.run(
-        `INSERT INTO order_rfqs (buyer_id, miller_id, variety_id, requested_sacks, fulfillment_deadline, status) VALUES (?, ?, ?, ?, ?, 'Pending')`,
-        [buyerId, millerId, varietyId, sacks, fulfillmentDeadline],
-        function (insertError) {
-            if (insertError) return sendDatabaseError(response, insertError)
-            return response.status(201).json({ orderId: this.lastID })
-        }
-    )
+                let pending = items.length;
+                let hasError = false;
+
+                items.forEach(item => {
+                    db.run(
+                        `INSERT INTO order_rfq_items (order_id, variety_id, requested_sacks) VALUES (?, ?, ?)`,
+                        [orderId, item.varietyId, item.requestedSacks],
+                        (itemError) => {
+                            if (hasError) return;
+                            if (itemError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, itemError)); }
+                            pending--;
+                            if (pending === 0) {
+                                db.run('COMMIT', (commitError) => {
+                                    if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError));
+                                    return response.status(201).json({ orderId });
+                                })
+                            }
+                        }
+                    )
+                })
+            }
+        )
+    })
 })
 
 router.get('/api/order-rfqs', (request, response) => {
     db.run(`UPDATE order_rfqs SET status = 'Expired' WHERE status = 'Pending' AND date(fulfillment_deadline) < date('now', 'localtime')`, () => {
         db.run(`UPDATE order_rfqs SET status = 'Late' WHERE status = 'Approved' AND date(fulfillment_deadline) < date('now', 'localtime')`, () => {
             const { buyerId, millerId } = request.query
-            let sql = `SELECT o.*, rv.name AS variety_name, rv.quality_grade FROM order_rfqs o LEFT JOIN rice_varieties rv ON o.variety_id = rv.variety_id WHERE 1=1`
+            let sql = `SELECT * FROM order_rfqs WHERE 1=1`
             const params = []
-            if (buyerId) { sql += ` AND o.buyer_id = ?`; params.push(Number(buyerId)) }
-            if (millerId) { sql += ` AND o.miller_id = ?`; params.push(Number(millerId)) }
-            sql += ` ORDER BY o.order_id DESC`
-            db.all(sql, params, (error, rows) => {
+            if (buyerId) { sql += ` AND buyer_id = ?`; params.push(Number(buyerId)) }
+            if (millerId) { sql += ` AND miller_id = ?`; params.push(Number(millerId)) }
+            sql += ` ORDER BY order_id DESC`
+            db.all(sql, params, (error, orders) => {
                 if (error) return sendDatabaseError(response, error)
-                return response.json({ orderRfqs: rows || [] })
+                if (!orders || orders.length === 0) return response.json({ orderRfqs: [] })
+                
+                const placeholders = orders.map(() => '?').join(', ')
+                db.all(`SELECT ori.*, rv.name AS variety_name, rv.quality_grade, sl.wholesale_price FROM order_rfq_items ori LEFT JOIN rice_varieties rv ON ori.variety_id = rv.variety_id LEFT JOIN order_rfqs o ON ori.order_id = o.order_id LEFT JOIN stock_listing sl ON o.miller_id = sl.user_id AND ori.variety_id = sl.variety_id WHERE ori.order_id IN (${placeholders})`, orders.map(o => o.order_id), (itemsError, itemsRows) => {
+                    if (itemsError) return sendDatabaseError(response, itemsError)
+                    const itemsByOrder = {}
+                    itemsRows.forEach(row => { if (!itemsByOrder[row.order_id]) itemsByOrder[row.order_id] = []; itemsByOrder[row.order_id].push(row) })
+                    return response.json({ orderRfqs: orders.map(o => ({ ...o, items: itemsByOrder[o.order_id] || [] })) })
+                })
             })
         })
     })
@@ -1223,17 +1272,17 @@ router.get('/api/order-rfqs', (request, response) => {
 
 router.put('/api/order-rfqs/:id', (request, response) => {
     const orderId = Number(request.params.id)
-    const { status } = request.body || {}
+    const { status, referenceId, timestamp } = request.body || {}
 
     if (!Number.isInteger(orderId) || orderId <= 0) {
         return response.status(400).json({ message: 'Valid order id is required.' })
     }
 
-    if (!['Approved', 'Rejected', 'Pending', 'Late', 'Expired'].includes(status)) {
+    if (!['Approved', 'Rejected', 'Pending', 'Late', 'Expired', 'Fulfilled'].includes(status)) {
         return response.status(400).json({ message: 'Invalid status.' })
     }
 
-    db.get('SELECT * FROM order_rfqs WHERE order_id = ?', [orderId], (error, order) => {
+    db.get(`SELECT o.*, sl.wholesale_price, rv.name AS variety_name FROM order_rfqs o LEFT JOIN stock_listing sl ON o.miller_id = sl.user_id AND o.variety_id = sl.variety_id LEFT JOIN rice_varieties rv ON o.variety_id = rv.variety_id WHERE o.order_id = ?`, [orderId], (error, order) => {
         if (error) return sendDatabaseError(response, error)
         if (!order) return response.status(404).json({ message: 'Order not found.' })
 
@@ -1257,6 +1306,43 @@ router.put('/api/order-rfqs/:id', (request, response) => {
                                 if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
                                 return response.json({ message: 'Order approved and stock allocated.' })
                             })
+                        }
+                    )
+                } else if (status === 'Fulfilled' && order.status !== 'Fulfilled') {
+                    db.run(
+                        `INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+                        [order.miller_id, 'SALE', referenceId || `RFQ-${orderId}`, order.buyer_id, timestamp || null],
+                        function (txError) {
+                            if (txError) return db.run('ROLLBACK', () => sendDatabaseError(response, txError))
+                            const txId = this.lastID
+                            
+                            db.run(
+                                `INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`,
+                                [txId, order.variety_id, -Math.abs(order.requested_sacks)],
+                                (invError) => {
+                                    if (invError) return db.run('ROLLBACK', () => sendDatabaseError(response, invError))
+                                    
+                                    db.run(
+                                        `UPDATE stock_listing SET allocated_sacks = MAX(0, allocated_sacks - ?), physical_sacks = MAX(0, physical_sacks - ?), last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`,
+                                        [order.requested_sacks, order.requested_sacks, order.miller_id, order.variety_id],
+                                        (stockError) => {
+                                            if (stockError) return db.run('ROLLBACK', () => sendDatabaseError(response, stockError))
+                                            
+                                            db.run(
+                                                `INSERT INTO receipts (transaction_id, item, item_quantity, cost, date) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+                                                [txId, order.variety_name, order.requested_sacks, order.requested_sacks * (order.wholesale_price || 0), timestamp || null],
+                                                (receiptError) => {
+                                                    if (receiptError) return db.run('ROLLBACK', () => sendDatabaseError(response, receiptError))
+                                                    db.run('COMMIT', (commitError) => {
+                                                        if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                                                        return response.json({ message: 'Order fulfilled successfully.' })
+                                                    })
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+                            )
                         }
                     )
                 } else {
@@ -1296,7 +1382,7 @@ router.get('/api/external-rfqs', (request, response) => {
     db.run(`UPDATE external_rfqs SET status = 'Expired' WHERE status = 'Pending' AND date(fulfillment_deadline) < date('now', 'localtime')`, () => {
         db.run(`UPDATE external_rfqs SET status = 'Late' WHERE status = 'Approved' AND date(fulfillment_deadline) < date('now', 'localtime')`, () => {
             const { millerId } = request.query
-            let sql = `SELECT e.*, rv.name AS variety_name, rv.quality_grade FROM external_rfqs e LEFT JOIN rice_varieties rv ON e.variety_id = rv.variety_id WHERE 1=1`
+            let sql = `SELECT e.*, rv.name AS variety_name, rv.quality_grade, sl.wholesale_price FROM external_rfqs e LEFT JOIN rice_varieties rv ON e.variety_id = rv.variety_id LEFT JOIN stock_listing sl ON e.miller_id = sl.user_id AND e.variety_id = sl.variety_id WHERE 1=1`
             const params = []
             if (millerId) { sql += ` AND e.miller_id = ?`; params.push(Number(millerId)) }
             sql += ` ORDER BY e.order_id DESC`
@@ -1309,13 +1395,88 @@ router.get('/api/external-rfqs', (request, response) => {
 })
 
 router.put('/api/external-rfqs/:id', (request, response) => {
-    const { status } = request.body || {}
-    if (!['Approved', 'Rejected', 'Pending', 'Late', 'Expired'].includes(status)) {
+    const orderId = Number(request.params.id)
+    const { status, referenceId, timestamp } = request.body || {}
+    
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+        return response.status(400).json({ message: 'Valid order id is required.' })
+    }
+
+    if (!['Approved', 'Rejected', 'Pending', 'Late', 'Expired', 'Fulfilled'].includes(status)) {
         return response.status(400).json({ message: 'Invalid status.' })
     }
-    db.run(`UPDATE external_rfqs SET status = ? WHERE order_id = ?`, [status || 'Pending', Number(request.params.id)], (error) => {
+    
+    db.get(`SELECT e.*, sl.wholesale_price, rv.name AS variety_name FROM external_rfqs e LEFT JOIN stock_listing sl ON e.miller_id = sl.user_id AND e.variety_id = sl.variety_id LEFT JOIN rice_varieties rv ON e.variety_id = rv.variety_id WHERE e.order_id = ?`, [orderId], (error, order) => {
         if (error) return sendDatabaseError(response, error)
-        return response.json({ message: 'External order status updated successfully.' })
+        if (!order) return response.status(404).json({ message: 'Order not found.' })
+
+        if (order.status === status) {
+            return response.json({ message: 'External order status updated successfully.' })
+        }
+
+        db.run('BEGIN TRANSACTION', (beginError) => {
+            if (beginError) return sendDatabaseError(response, beginError)
+
+            db.run(`UPDATE external_rfqs SET status = ? WHERE order_id = ?`, [status, orderId], (updateError) => {
+                if (updateError) return db.run('ROLLBACK', () => sendDatabaseError(response, updateError))
+
+                if (status === 'Approved' && order.status !== 'Approved') {
+                    db.run(
+                        `UPDATE stock_listing SET allocated_sacks = allocated_sacks + ?, last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`,
+                        [order.requested_sacks, order.miller_id, order.variety_id],
+                        (stockError) => {
+                            if (stockError) return db.run('ROLLBACK', () => sendDatabaseError(response, stockError))
+                            db.run('COMMIT', (commitError) => {
+                                if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                                return response.json({ message: 'External order approved and stock allocated.' })
+                            })
+                        }
+                    )
+                } else if (status === 'Fulfilled' && order.status !== 'Fulfilled') {
+                    db.run(
+                        `INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+                        [order.miller_id, 'SALE', referenceId || `EXT-RFQ-${orderId}`, order.buyer_name, timestamp || null],
+                        function (txError) {
+                            if (txError) return db.run('ROLLBACK', () => sendDatabaseError(response, txError))
+                            const txId = this.lastID
+                            
+                            db.run(
+                                `INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`,
+                                [txId, order.variety_id, -Math.abs(order.requested_sacks)],
+                                (invError) => {
+                                    if (invError) return db.run('ROLLBACK', () => sendDatabaseError(response, invError))
+                                    
+                                    db.run(
+                                        `UPDATE stock_listing SET allocated_sacks = MAX(0, allocated_sacks - ?), physical_sacks = MAX(0, physical_sacks - ?), last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`,
+                                        [order.requested_sacks, order.requested_sacks, order.miller_id, order.variety_id],
+                                        (stockError) => {
+                                            if (stockError) return db.run('ROLLBACK', () => sendDatabaseError(response, stockError))
+                                            
+                                            db.run(
+                                                `INSERT INTO receipts (transaction_id, item, item_quantity, cost, date) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
+                                                [txId, order.variety_name, order.requested_sacks, order.requested_sacks * (order.wholesale_price || 0), timestamp || null],
+                                                (receiptError) => {
+                                                    if (receiptError) return db.run('ROLLBACK', () => sendDatabaseError(response, receiptError))
+                                                    db.run('COMMIT', (commitError) => {
+                                                        if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                                                        return response.json({ message: 'External order fulfilled successfully.' })
+                                                    })
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    )
+                } else {
+                    db.run('COMMIT', (commitError) => {
+                        if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
+                        return response.json({ message: 'External order status updated successfully.' })
+                    })
+                }
+            })
+        })
     })
 })
 

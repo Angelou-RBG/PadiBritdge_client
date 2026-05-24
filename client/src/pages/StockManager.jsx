@@ -22,13 +22,15 @@ export default function StockManager() {
   const [modifyPhysical, setModifyPhysical] = useState('');
   const [modifyAllocated, setModifyAllocated] = useState('');
   const [modifyPrice, setModifyPrice] = useState('');
+  const [modifyTimestamp, setModifyTimestamp] = useState('');
 
-  const [selectedVariety, setSelectedVariety] = useState('');
   const [requestType, setRequestType] = useState('internal');
-  const [quantity, setQuantity] = useState('');
   const [buyerId, setBuyerId] = useState('');
   const [buyerName, setBuyerName] = useState('');
   const [fulfillmentDeadline, setFulfillmentDeadline] = useState('');
+  const [items, setItems] = useState([]);
+  const [tempVariety, setTempVariety] = useState('');
+  const [tempQuantity, setTempQuantity] = useState('');
   const [referenceId, setReferenceId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -44,9 +46,32 @@ export default function StockManager() {
     }
   }, [isModifyModalOpen, refreshKey, user]);
 
+  const handleAddItem = () => {
+    if (tempVariety && tempQuantity) {
+      const varietyObj = varieties.find(v => String(v.variety_id) === String(tempVariety));
+      setItems(prev => [...prev, { 
+        varietyId: Number(tempVariety), 
+        requestedSacks: Number(tempQuantity),
+        varietyName: varietyObj?.name,
+        qualityGrade: varietyObj?.quality_grade
+      }]);
+      setTempVariety('');
+      setTempQuantity('');
+    }
+  };
+
+  const handleRemoveItem = (index) => {
+    setItems(prev => prev.filter((_, i) => i !== index));
+  };
+
   async function handleAddRecordSubmit(event) {
     event.preventDefault();
     setNotification(null);
+
+    if (items.length === 0) {
+      setNotification({ type: 'error', message: 'You must add at least one item to the order.' });
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -55,24 +80,21 @@ export default function StockManager() {
         await createOrderRfq({
           buyerId: buyerId ? Number(buyerId) : (user?.id || user?._id),
           millerId: user?.id || user?._id,
-          varietyId: selectedVariety,
-          requestedSacks: Number(quantity),
+          items,
           fulfillmentDeadline: fulfillmentDeadline || null,
         });
       } else {
         await createExternalRfq({
           buyerName: buyerName.trim(),
           millerId: user?.id || user?._id,
-          varietyId: selectedVariety,
-          requestedSacks: Number(quantity),
+          items,
           fulfillmentDeadline: fulfillmentDeadline || null,
         });
       }
 
       setIsAddModalOpen(false);
       setRefreshKey(prev => prev + 1);
-      setSelectedVariety('');
-      setQuantity('');
+      setItems([]);
       setBuyerId('');
       setBuyerName('');
       setFulfillmentDeadline('');
@@ -97,6 +119,7 @@ export default function StockManager() {
       setModifyPhysical('');
       setModifyAllocated('');
       setModifyPrice('');
+      setModifyTimestamp('');
     }
   };
 
@@ -111,11 +134,13 @@ export default function StockManager() {
         allocatedSacks: Number(modifyAllocated),
         wholesalePrice: Number(modifyPrice),
         referenceId: referenceId.trim() || 'MODIFICATION',
+        timestamp: modifyTimestamp || null,
       });
       setIsModifyModalOpen(false);
       setRefreshKey(prev => prev + 1);
       setSelectedStockId('');
       setReferenceId('');
+      setModifyTimestamp('');
     } catch (error) {
       setNotification({ type: 'error', message: error.response?.data?.message || 'Failed to modify record.' });
     } finally {
@@ -157,14 +182,6 @@ export default function StockManager() {
       >
         <NotificationBean type={notification?.type} message={notification?.message} />
         <form className="form-shell" onSubmit={handleAddRecordSubmit}>
-          <label htmlFor="variety-select">Rice Variety</label>
-          <select id="variety-select" value={selectedVariety} onChange={e => setSelectedVariety(e.target.value)} required disabled={isSubmitting}>
-            <option value="">-- Select Variety --</option>
-            {varieties.map(v => (
-              <option key={v.variety_id} value={v.variety_id}>{v.name} ({v.quality_grade})</option>
-            ))}
-          </select>
-
           <label htmlFor="request-type">Request Type</label>
           <select id="request-type" value={requestType} onChange={e => setRequestType(e.target.value)} disabled={isSubmitting}>
             <option value="internal">Internal System User (Buyer ID)</option>
@@ -182,9 +199,6 @@ export default function StockManager() {
               <input id="buyer-name" type="text" placeholder="e.g. John Doe" value={buyerName} onChange={e => setBuyerName(e.target.value)} required disabled={isSubmitting} />
             </>
           )}
-
-          <label htmlFor="quantity">Requested Volume (Sacks)</label>
-          <input id="quantity" type="number" step="1" placeholder="e.g. 50" value={quantity} onChange={e => setQuantity(e.target.value)} required disabled={isSubmitting} />
 
           <label htmlFor="fulfillment-deadline">Fulfillment Deadline</label>
           <input id="fulfillment-deadline" type="date" value={fulfillmentDeadline} onChange={e => setFulfillmentDeadline(e.target.value)} required disabled={isSubmitting} />
@@ -223,6 +237,9 @@ export default function StockManager() {
 
           <label htmlFor="modify-reference">Reference ID / Notes (Optional)</label>
           <input id="modify-reference" type="text" placeholder="e.g., Audit or correction" value={referenceId} onChange={e => setReferenceId(e.target.value)} disabled={isSubmitting || !selectedStockId} />
+
+          <label htmlFor="modify-timestamp">Correction Date (Optional)</label>
+          <input id="modify-timestamp" type="datetime-local" value={modifyTimestamp} onChange={e => setModifyTimestamp(e.target.value)} disabled={isSubmitting || !selectedStockId} />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
             <button type="submit" className="primary-btn" disabled={isSubmitting || !selectedStockId}>
