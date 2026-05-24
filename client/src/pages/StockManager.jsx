@@ -5,14 +5,12 @@ import RFQSListing from '../components/RFQSListing';
 import FloatingCard from '../components/FloatingCard';
 import NotificationBean from '../components/NotificationBean';
 import { useAuth } from '../context/AuthContext';
-import { getRiceVarieties, createOrderRfq, createExternalRfq, getStockListings, updateStockListing } from '../services/api';
+import { getStockListings, updateStockListing } from '../services/api';
 
 export default function StockManager() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [varieties, setVarieties] = useState([]);
   const [notification, setNotification] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -23,87 +21,14 @@ export default function StockManager() {
   const [modifyAllocated, setModifyAllocated] = useState('');
   const [modifyPrice, setModifyPrice] = useState('');
   const [modifyTimestamp, setModifyTimestamp] = useState('');
-
-  const [requestType, setRequestType] = useState('internal');
-  const [buyerId, setBuyerId] = useState('');
-  const [buyerName, setBuyerName] = useState('');
-  const [fulfillmentDeadline, setFulfillmentDeadline] = useState('');
-  const [items, setItems] = useState([]);
-  const [tempVariety, setTempVariety] = useState('');
-  const [tempQuantity, setTempQuantity] = useState('');
   const [referenceId, setReferenceId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (isAddModalOpen && varieties.length === 0) {
-      getRiceVarieties().then(data => setVarieties(data.riceVarieties || [])).catch(console.error);
-    }
-  }, [isAddModalOpen, varieties.length]);
 
   useEffect(() => {
     if (isModifyModalOpen) {
       getStockListings({ userId: user?.id || user?._id }).then(data => setStockListings(data.stockListings || [])).catch(console.error);
     }
   }, [isModifyModalOpen, refreshKey, user]);
-
-  const handleAddItem = () => {
-    if (tempVariety && tempQuantity) {
-      const varietyObj = varieties.find(v => String(v.variety_id) === String(tempVariety));
-      setItems(prev => [...prev, { 
-        varietyId: Number(tempVariety), 
-        requestedSacks: Number(tempQuantity),
-        varietyName: varietyObj?.name,
-        qualityGrade: varietyObj?.quality_grade
-      }]);
-      setTempVariety('');
-      setTempQuantity('');
-    }
-  };
-
-  const handleRemoveItem = (index) => {
-    setItems(prev => prev.filter((_, i) => i !== index));
-  };
-
-  async function handleAddRecordSubmit(event) {
-    event.preventDefault();
-    setNotification(null);
-
-    if (items.length === 0) {
-      setNotification({ type: 'error', message: 'You must add at least one item to the order.' });
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      
-      if (requestType === 'internal') {
-        await createOrderRfq({
-          buyerId: buyerId ? Number(buyerId) : (user?.id || user?._id),
-          millerId: user?.id || user?._id,
-          items,
-          fulfillmentDeadline: fulfillmentDeadline || null,
-        });
-      } else {
-        await createExternalRfq({
-          buyerName: buyerName.trim(),
-          millerId: user?.id || user?._id,
-          items,
-          fulfillmentDeadline: fulfillmentDeadline || null,
-        });
-      }
-
-      setIsAddModalOpen(false);
-      setRefreshKey(prev => prev + 1);
-      setItems([]);
-      setBuyerId('');
-      setBuyerName('');
-      setFulfillmentDeadline('');
-    } catch (error) {
-      setNotification({ type: 'error', message: error.response?.data?.message || 'Failed to add allocation request.' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
 
   const handleStockSelect = (e) => {
     const stockId = e.target.value;
@@ -173,43 +98,7 @@ export default function StockManager() {
 
       <StockListing isManagerView onModifyRecord={() => setIsModifyModalOpen(true)} refreshKey={refreshKey} />
 
-      <RFQSListing onAddRecord={() => setIsAddModalOpen(true)} refreshKey={refreshKey} onRfqUpdate={() => setRefreshKey(prev => prev + 1)} />
-
-      <FloatingCard
-        open={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="Add Allocation Request"
-      >
-        <NotificationBean type={notification?.type} message={notification?.message} />
-        <form className="form-shell" onSubmit={handleAddRecordSubmit}>
-          <label htmlFor="request-type">Request Type</label>
-          <select id="request-type" value={requestType} onChange={e => setRequestType(e.target.value)} disabled={isSubmitting}>
-            <option value="internal">Internal System User (Buyer ID)</option>
-            <option value="external">External Walk-in (Buyer Name)</option>
-          </select>
-
-          {requestType === 'internal' ? (
-            <>
-              <label htmlFor="buyer-id">Buyer ID</label>
-              <input id="buyer-id" type="number" step="1" min="1" placeholder="Leave blank to use your own ID" value={buyerId} onChange={e => setBuyerId(e.target.value)} disabled={isSubmitting} />
-            </>
-          ) : (
-            <>
-              <label htmlFor="buyer-name">Buyer Name</label>
-              <input id="buyer-name" type="text" placeholder="e.g. John Doe" value={buyerName} onChange={e => setBuyerName(e.target.value)} required disabled={isSubmitting} />
-            </>
-          )}
-
-          <label htmlFor="fulfillment-deadline">Fulfillment Deadline</label>
-          <input id="fulfillment-deadline" type="date" value={fulfillmentDeadline} onChange={e => setFulfillmentDeadline(e.target.value)} required disabled={isSubmitting} />
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-            <button type="submit" className="primary-btn" disabled={isSubmitting}>
-              {isSubmitting ? 'Submitting...' : 'Submit Request'}
-            </button>
-          </div>
-        </form>
-      </FloatingCard>
+      <RFQSListing refreshKey={refreshKey} onRfqUpdate={() => setRefreshKey(prev => prev + 1)} />
 
       <FloatingCard
         open={isModifyModalOpen}

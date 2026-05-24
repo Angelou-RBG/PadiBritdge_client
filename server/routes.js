@@ -939,6 +939,7 @@ router.get('/api/stock-listings', (request, response) => {
     const { userId } = request.query
     let sql = `SELECT
             sl.stock_id,
+            sl.variety_id,
             sl.user_id,
             sl.physical_sacks,
             sl.allocated_sacks,

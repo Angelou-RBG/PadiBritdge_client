@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { getOrderRfqs, updateOrderRfq, getExternalRfqs, updateExternalRfq } from '../services/api';
+import { getOrderRfqs, updateOrderRfq, getExternalRfqs, updateExternalRfq, createOrderRfq, createExternalRfq, getStockListings } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import FloatingCard from './FloatingCard';
 
-export default function RFQSListing({ onAddRecord, refreshKey = 0, onRfqUpdate }) {
+export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
   const [rfqs, setRfqs] = useState([]);
   const [extRfqs, setExtRfqs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -15,6 +15,17 @@ export default function RFQSListing({ onAddRecord, refreshKey = 0, onRfqUpdate }
   const [fulfillReference, setFulfillReference] = useState('');
   const [fulfillTimestamp, setFulfillTimestamp] = useState('');
   const [isSubmittingFulfill, setIsSubmittingFulfill] = useState(false);
+
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [requestType, setRequestType] = useState('internal');
+  const [buyerId, setBuyerId] = useState('');
+  const [buyerName, setBuyerName] = useState('');
+  const [fulfillmentDeadline, setFulfillmentDeadline] = useState('');
+  const [items, setItems] = useState([]);
+  const [tempVariety, setTempVariety] = useState('');
+  const [tempQuantity, setTempQuantity] = useState('');
+  const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
+  const [stockListings, setStockListings] = useState([]);
 
   useEffect(() => {
     let isActive = true;
@@ -48,6 +59,14 @@ export default function RFQSListing({ onAddRecord, refreshKey = 0, onRfqUpdate }
       isActive = false;
     };
   }, [refreshKey, localRefresh, user]);
+
+  useEffect(() => {
+    if (isAddModalOpen && stockListings.length === 0) {
+      getStockListings({ userId: user?.id || user?._id })
+        .then(data => setStockListings(data.stockListings || []))
+        .catch(console.error);
+    }
+  }, [isAddModalOpen, stockListings.length, user]);
 
   const handleUpdateStatus = async (rfq, newStatus, isExternal = false) => {
     try {
@@ -94,6 +113,59 @@ export default function RFQSListing({ onAddRecord, refreshKey = 0, onRfqUpdate }
       alert(err.response?.data?.message || 'Failed to fulfill request.');
     } finally {
       setIsSubmittingFulfill(false);
+    }
+  };
+
+  const handleOpenAddModal = () => {
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    setFulfillmentDeadline(nextMonth.toISOString().split('T')[0]);
+    setIsAddModalOpen(true);
+  };
+
+  const handleAddItem = () => {
+    if (tempVariety && tempQuantity) {
+      const stockObj = stockListings.find(s => String(s.variety_id) === String(tempVariety));
+      setItems(prev => [...prev, { 
+        varietyId: Number(tempVariety), 
+        requestedSacks: Number(tempQuantity),
+        varietyName: stockObj?.name,
+        qualityGrade: stockObj?.quality_grade,
+        wholesalePrice: stockObj?.wholesale_price || 0
+      }]);
+      setTempVariety('');
+      setTempQuantity('');
+    }
+  };
+
+  const handleRemoveItem = (index) => {
+    setItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddRecordSubmit = async (event) => {
+    event.preventDefault();
+    if (items.length === 0) {
+      alert('You must add at least one item to the order.');
+      return;
+    }
+    try {
+      setIsSubmittingAdd(true);
+      if (requestType === 'internal') {
+        await createOrderRfq({ buyerId: buyerId ? Number(buyerId) : (user?.id || user?._id), millerId: user?.id || user?._id, items, fulfillmentDeadline: fulfillmentDeadline || null });
+      } else {
+        await createExternalRfq({ buyerName: buyerName.trim(), millerId: user?.id || user?._id, items, fulfillmentDeadline: fulfillmentDeadline || null });
+      }
+      setIsAddModalOpen(false);
+      setLocalRefresh(prev => prev + 1);
+      setItems([]);
+      setBuyerId('');
+      setBuyerName('');
+      setFulfillmentDeadline('');
+      if (onRfqUpdate) onRfqUpdate();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to add allocation request.');
+    } finally {
+      setIsSubmittingAdd(false);
     }
   };
 
@@ -169,11 +241,9 @@ export default function RFQSListing({ onAddRecord, refreshKey = 0, onRfqUpdate }
     <div style={{ marginTop: '3rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1.25rem' }}>Internal Allocation Requests</h4>
-        {onAddRecord && (
-          <button type="button" className="primary-btn" onClick={onAddRecord}>
-            Add Allocation Request
-          </button>
-        )}
+        <button type="button" className="primary-btn" onClick={handleOpenAddModal}>
+          Add Allocation Request
+        </button>
       </div>
 
       <h5 style={{ color: '#475569', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Pending & Past Requests</h5>
@@ -231,6 +301,76 @@ export default function RFQSListing({ onAddRecord, refreshKey = 0, onRfqUpdate }
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
             <button type="submit" className="primary-btn" disabled={isSubmittingFulfill}>
               {isSubmittingFulfill ? 'Processing...' : 'Confirm Fulfillment'}
+            </button>
+          </div>
+        </form>
+      </FloatingCard>
+
+      <FloatingCard
+        open={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Add Allocation Request"
+      >
+        <form className="form-shell" onSubmit={handleAddRecordSubmit}>
+          <label htmlFor="request-type">Request Type</label>
+          <select id="request-type" value={requestType} onChange={e => setRequestType(e.target.value)} disabled={isSubmittingAdd}>
+            <option value="internal">Internal System User (Buyer ID)</option>
+            <option value="external">External Walk-in (Buyer Name)</option>
+          </select>
+
+          {requestType === 'internal' ? (
+            <>
+              <label htmlFor="buyer-id">Buyer ID</label>
+              <input id="buyer-id" type="number" step="1" min="1" placeholder="Leave blank to use your own ID" value={buyerId} onChange={e => setBuyerId(e.target.value)} disabled={isSubmittingAdd} />
+            </>
+          ) : (
+            <>
+              <label htmlFor="buyer-name">Buyer Name</label>
+              <input id="buyer-name" type="text" placeholder="e.g. John Doe" value={buyerName} onChange={e => setBuyerName(e.target.value)} required disabled={isSubmittingAdd} />
+            </>
+          )}
+
+          <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #e2e8f0' }}>
+            <h5 style={{ margin: '0 0 0.5rem 0', color: '#1e293b' }}>Order Items (Cart)</h5>
+            {items.length === 0 ? <p style={{ fontSize: '0.85rem', color: '#64748b' }}>No items added yet.</p> : (
+              <>
+                <ul style={{ paddingLeft: '1.25rem', marginBottom: '1rem', fontSize: '0.9rem', color: '#475569' }}>
+                  {items.map((item, index) => (
+                    <li key={index} style={{ marginBottom: '0.25rem' }}>
+                      {item.varietyName} ({item.qualityGrade}) - {item.requestedSacks} sacks @ ₱{Number(item.wholesalePrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })} = <strong>₱{(item.requestedSacks * item.wholesalePrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+                      <button type="button" onClick={() => handleRemoveItem(index)} style={{ marginLeft: '0.5rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}>×</button>
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ textAlign: 'right', fontWeight: 'bold', marginBottom: '1rem', color: '#0f172a' }}>
+                  Order Total: ₱{items.reduce((sum, item) => sum + (item.requestedSacks * item.wholesalePrice), 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                </div>
+              </>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '0.8rem', display: 'block', color: '#475569' }}>Variety</label>
+                <select value={tempVariety} onChange={e => setTempVariety(e.target.value)} disabled={isSubmittingAdd} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                  <option value="">-- Select --</option>
+                  {stockListings.map(s => (
+                    <option key={s.variety_id} value={s.variety_id}>{s.name} ({s.quality_grade}) - ₱{Number(s.wholesale_price).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ width: '100px' }}>
+                <label style={{ fontSize: '0.8rem', display: 'block', color: '#475569' }}>Sacks</label>
+                <input type="number" min="1" step="1" value={tempQuantity} onChange={e => setTempQuantity(e.target.value)} disabled={isSubmittingAdd} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+              </div>
+              <button type="button" onClick={handleAddItem} className="primary-btn" style={{ padding: '0.55rem 1rem', height: '36px' }}>Add</button>
+            </div>
+          </div>
+
+          <label htmlFor="fulfillment-deadline">Fulfillment Deadline</label>
+          <input id="fulfillment-deadline" type="date" value={fulfillmentDeadline} onChange={e => setFulfillmentDeadline(e.target.value)} required disabled={isSubmittingAdd} />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+            <button type="submit" className="primary-btn" disabled={isSubmittingAdd}>
+              {isSubmittingAdd ? 'Submitting...' : 'Add Request'}
             </button>
           </div>
         </form>
