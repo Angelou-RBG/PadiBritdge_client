@@ -4,6 +4,11 @@ const {
     hashPassword,
     buildUserRow,
     sendDatabaseError,
+    runAsync,
+    getAsync,
+    allAsync,
+    execAsync,
+    withTransaction,
     initializeDatabase,
     databasePath,
 } = require('../database')
@@ -14,6 +19,11 @@ module.exports = {
     hashPassword,
     buildUserRow,
     sendDatabaseError,
+    runAsync,
+    getAsync,
+    allAsync,
+    execAsync,
+    withTransaction,
     initializeDatabase,
     databasePath,
 }

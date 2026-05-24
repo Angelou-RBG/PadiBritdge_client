@@ -30,6 +30,83 @@ function sendDatabaseError(response) {
     return response.status(500).json({ message: 'Database connection failed.' })
 }
 
+function runAsync(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.run(sql, params, function (error) {
+            if (error) {
+                return reject(error)
+            }
+
+            return resolve({
+                lastID: this.lastID,
+                changes: this.changes,
+            })
+        })
+    })
+}
+
+function getAsync(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (error, row) => {
+            if (error) {
+                return reject(error)
+            }
+
+            return resolve(row)
+        })
+    })
+}
+
+function allAsync(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, (error, rows) => {
+            if (error) {
+                return reject(error)
+            }
+
+            return resolve(rows || [])
+        })
+    })
+}
+
+function execAsync(sql) {
+    return new Promise((resolve, reject) => {
+        db.exec(sql, (error) => {
+            if (error) {
+                return reject(error)
+            }
+
+            return resolve()
+        })
+    })
+}
+
+async function withTransaction(work) {
+    await execAsync('BEGIN TRANSACTION')
+
+    try {
+        const result = await work({
+            db,
+            run: runAsync,
+            get: getAsync,
+            all: allAsync,
+            exec: execAsync,
+        })
+
+        await execAsync('COMMIT')
+
+        return result
+    } catch (error) {
+        try {
+            await execAsync('ROLLBACK')
+        } catch (rollbackError) {
+            console.error('Failed to rollback transaction:', rollbackError.message)
+        }
+
+        throw error
+    }
+}
+
 function initializeDatabase(callback) {
     db.on('error', (error) => {
         console.error('SQLite error:', error.message)
@@ -276,5 +353,10 @@ module.exports = {
     hashPassword,
     buildUserRow,
     sendDatabaseError,
+    runAsync,
+    getAsync,
+    allAsync,
+    execAsync,
+    withTransaction,
     initializeDatabase,
 }
