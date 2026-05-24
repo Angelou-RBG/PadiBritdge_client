@@ -182,22 +182,21 @@ export default function ReserveStock() {
               </div>
             </>
           )}
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.8rem', display: 'block', color: '#475569' }}>Variety</label>
-              <select value={tempVariety} onChange={e => setTempVariety(e.target.value)} disabled={isSubmitting} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
+            <div style={{ flex: 2 }}>
+              <label style={{ fontSize: '0.9rem', display: 'block', color: '#475569', marginBottom: '0.25rem' }}>Variety</label>
+              <select value={tempVariety} onChange={e => setTempVariety(e.target.value)} disabled={isSubmitting} style={{ padding: '0.75rem', fontSize: '1rem', width: '100%', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff' }}>
                 <option value="">-- Select --</option>
                 {stockListings.map(s => (
                   <option key={s.variety_id} value={s.variety_id}>{s.name} ({s.quality_grade}) - ₱{Number(s.wholesale_price).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</option>
                 ))}
               </select>
             </div>
-            <div style={{ width: '100px' }}>
-              <label style={{ fontSize: '0.8rem', display: 'block', color: '#475569' }}>Sacks</label>
-              <input type="number" min="1" max={maxAllowed !== '' ? maxAllowed : undefined} step="1" value={tempQuantity} onChange={e => setTempQuantity(e.target.value)} disabled={isSubmitting} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+            <div style={{ width: '120px' }}>
+              <label style={{ fontSize: '0.9rem', display: 'block', color: '#475569', marginBottom: '0.25rem' }}>Sacks</label>
+              <input type="number" min="1" max={maxAllowed !== '' ? maxAllowed : undefined} step="1" value={tempQuantity} onChange={e => setTempQuantity(e.target.value)} disabled={isSubmitting} style={{ padding: '0.75rem', fontSize: '1rem', width: '100%', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff' }} />
             </div>
-            <button type="button" onClick={handleAddItem} className="ghost-btn" style={{ padding: '0.5rem' }}>Add Item</button>
-            <button type="button" onClick={handleAddItem} className="primary-btn" style={{ padding: '0.55rem 1rem', height: '36px' }}>Add</button>
+            <button type="button" onClick={handleAddItem} className="primary-btn" style={{ padding: '0.75rem 1.5rem', fontSize: '1rem', height: 'auto', borderRadius: '6px' }}>Add Item</button>
           </div>
         </div>
 

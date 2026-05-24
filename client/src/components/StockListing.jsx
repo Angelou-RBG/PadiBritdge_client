@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createInventoryLog, getStockListings } from '../services/api';
+import { createInventoryLog, getStockListings, updateStockListing } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import FloatingCard from './FloatingCard';
+import NotificationBean from './NotificationBean';
 import PostCard from './PostCard';
 
-export default function StockListing({ isProfileView, isManagerView, onAddRecord, onModifyRecord, refreshKey = 0, userId }) {
+export default function StockListing({ isProfileView, isManagerView, onAddRecord, onStockUpdate, refreshKey = 0, userId }) {
   const [stocks, setStocks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -21,6 +22,15 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
   const [transactionCustomer, setTransactionCustomer] = useState('');
   const [transactionTimestamp, setTransactionTimestamp] = useState('');
   const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
+  const [isModifyModalOpen, setIsModifyModalOpen] = useState(false);
+  const [selectedStockId, setSelectedStockId] = useState('');
+  const [modifyPhysical, setModifyPhysical] = useState('');
+  const [modifyAllocated, setModifyAllocated] = useState('');
+  const [modifyPrice, setModifyPrice] = useState('');
+  const [modifyReferenceId, setModifyReferenceId] = useState('');
+  const [isSubmittingModify, setIsSubmittingModify] = useState(false);
+  const [modifyNotification, setModifyNotification] = useState(null);
+  
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -181,10 +191,84 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
       });
       setLocalRefresh(prev => prev + 1);
       closeTransactionModal();
+      if (onStockUpdate) onStockUpdate();
     } catch (submitError) {
       alert(submitError.response?.data?.message || 'Failed to save transaction.');
     } finally {
       setIsSubmittingTransaction(false);
+    }
+  };
+
+  const handleStockSelect = (e) => {
+    const stockId = e.target.value;
+    setSelectedStockId(stockId);
+    if (stockId) {
+      const stock = stocks.find(s => String(s.stock_id) === String(stockId));
+      if (stock) {
+        setModifyPhysical(stock.physical_sacks);
+        setModifyAllocated(stock.allocated_sacks);
+        setModifyPrice(stock.wholesale_price);
+      }
+    } else {
+      setModifyPhysical('');
+      setModifyAllocated('');
+      setModifyPrice('');
+    }
+  };
+
+  const getLocalDateTimeValue = () => {
+    const now = new Date();
+    const offsetMs = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+  };
+
+  const handleModifyRecordSubmit = async (event) => {
+    event.preventDefault();
+    setModifyNotification(null);
+    try {
+      const currentStock = stocks.find(s => String(s.stock_id) === String(selectedStockId));
+      if (!currentStock) {
+        setModifyNotification({ type: 'error', message: 'Selected stock listing could not be found.' });
+        return;
+      }
+
+      const nextPhysical = Number(modifyPhysical);
+      const nextAllocated = Number(modifyAllocated);
+      const nextPrice = Number(modifyPrice);
+      const changedFields = [];
+
+      if (nextAllocated > nextPhysical) {
+        setModifyNotification({ type: 'error', message: 'Allocated volume cannot exceed total physical volume.' });
+        return;
+      }
+
+      if (Number(currentStock.physical_sacks) !== nextPhysical) changedFields.push('physical_sacks');
+      if (Number(currentStock.allocated_sacks) !== nextAllocated) changedFields.push('allocated_sacks');
+      if (Number(currentStock.wholesale_price) !== nextPrice) changedFields.push('wholesale_price');
+
+      if (changedFields.length === 0) {
+        setModifyNotification({ type: 'error', message: 'No changes detected.' });
+        return;
+      }
+
+      setIsSubmittingModify(true);
+      await updateStockListing(selectedStockId, {
+        userId: user?.id || user?._id,
+        physicalSacks: nextPhysical,
+        allocatedSacks: nextAllocated,
+        wholesalePrice: nextPrice,
+        referenceId: modifyReferenceId.trim() || 'MODIFICATION',
+        timestamp: getLocalDateTimeValue(),
+      });
+      setIsModifyModalOpen(false);
+      setLocalRefresh(prev => prev + 1);
+      setSelectedStockId('');
+      setModifyReferenceId('');
+      if (onStockUpdate) onStockUpdate();
+    } catch (err) {
+      setModifyNotification({ type: 'error', message: err.response?.data?.message || 'Failed to modify record.' });
+    } finally {
+      setIsSubmittingModify(false);
     }
   };
 
@@ -313,19 +397,15 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
           <button type="button" className="primary-btn" onClick={() => openTransactionModal('update-stock')}>Update Stock</button>
           <button type="button" className="ghost-btn" onClick={() => openTransactionModal('add-transaction')}>Add Transaction</button>
           <button type="button" className="ghost-btn">Post Stock Listing</button>
-          <button type="button" className="ghost-btn">Export Inventory to CSV</button>
-          <button type="button" className="ghost-btn">Generate Weekly Sales Report</button>
         </div>
       )}
 
       {isManagerView && (
         <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="primary-btn" onClick={onModifyRecord}>Modify Existing Records</button>
+          <button type="button" className="primary-btn" onClick={() => setIsModifyModalOpen(true)}>Modify Existing Records</button>
           <button type="button" className="primary-btn" onClick={() => openTransactionModal('update-stock')}>Update Stock</button>
           <button type="button" className="ghost-btn" onClick={() => openTransactionModal('add-transaction')}>Add Transaction</button>
           <button type="button" className="ghost-btn">Post Stock Listing</button>
-          <button type="button" className="ghost-btn">Export Inventory to CSV</button>
-          <button type="button" className="ghost-btn">Generate Weekly Sales Report</button>
         </div>
       )}
 
@@ -341,13 +421,14 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
               : 'Record outbound stock movements outside the system using a positive quantity change.'}
           </p>
 
-          <label htmlFor="transaction-stock">Stock Listing</label>
+          <label htmlFor="transaction-stock" style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '0.5rem', display: 'block', color: '#1e293b' }}>Stock Listing</label>
           <select
             id="transaction-stock"
             value={selectedTransactionStockId}
             onChange={e => setSelectedTransactionStockId(e.target.value)}
             required
             disabled={isSubmittingTransaction}
+            style={{ padding: '0.75rem', fontSize: '1.05rem', width: '100%', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', marginBottom: '1.25rem', cursor: 'pointer' }}
           >
             <option value="">-- Select Stock --</option>
             {transactionStocks.map(stock => (
@@ -357,66 +438,149 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
             ))}
           </select>
 
-          <label htmlFor="transaction-type">Transaction Type</label>
-          <select
-            id="transaction-type"
-            value={selectedTransactionType}
-            onChange={e => setSelectedTransactionType(e.target.value)}
-            required
-            disabled={isSubmittingTransaction}
-          >
-            <option value="">-- Select Type --</option>
-            {availableTransactionTypes.map(type => (
-              <option key={type.type_name} value={type.type_name}>
-                {type.type_name} - {type.category} - {type.quantity_direction}
-              </option>
-            ))}
-          </select>
+          <label>Transaction Type</label>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            {availableTransactionTypes.map(type => {
+              const isSelected = selectedTransactionType === type.type_name;
+              return (
+                <button
+                  key={type.type_name}
+                  type="button"
+                  onClick={() => setSelectedTransactionType(type.type_name)}
+                  disabled={isSubmittingTransaction}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    border: isSelected ? '1px solid #16a34a' : '1px solid #cbd5e1',
+                    backgroundColor: isSelected ? '#16a34a' : '#f8fafc',
+                    color: isSelected ? '#fff' : '#475569',
+                    fontWeight: '500',
+                    cursor: isSubmittingTransaction ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {type.type_name}
+                </button>
+              );
+            })}
+          </div>
 
-          <label htmlFor="transaction-quantity">Quantity Change (Sacks)</label>
-          <input
-            id="transaction-quantity"
-            type="number"
-            min="1"
-            step="1"
-            value={transactionQuantity}
-            onChange={e => setTransactionQuantity(e.target.value)}
-            required
-            disabled={isSubmittingTransaction}
-          />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0 1rem' }}>
+            <div>
+              <label htmlFor="transaction-quantity">Quantity Change (Sacks)</label>
+              <input
+                id="transaction-quantity"
+                type="number"
+                min="1"
+                step="1"
+                value={transactionQuantity}
+                onChange={e => setTransactionQuantity(e.target.value)}
+                required
+                disabled={isSubmittingTransaction}
+              />
+            </div>
 
-          <label htmlFor="transaction-reference">Reference ID</label>
-          <input
-            id="transaction-reference"
-            type="text"
-            placeholder={transactionMode === 'update-stock' ? 'e.g. Restock receipt' : 'e.g. Cash sale, wastage log'}
-            value={transactionReference}
-            onChange={e => setTransactionReference(e.target.value)}
-            disabled={isSubmittingTransaction}
-          />
+            <div>
+              <label htmlFor="transaction-reference">Reference ID</label>
+              <input
+                id="transaction-reference"
+                type="text"
+                placeholder={transactionMode === 'update-stock' ? 'e.g. Restock receipt' : 'e.g. Cash sale, wastage log'}
+                value={transactionReference}
+                onChange={e => setTransactionReference(e.target.value)}
+                disabled={isSubmittingTransaction}
+              />
+            </div>
 
-          <label htmlFor="transaction-customer">Customer / Notes</label>
-          <input
-            id="transaction-customer"
-            type="text"
-            placeholder={transactionMode === 'update-stock' ? 'Optional supplier or source' : 'Optional customer name or note'}
-            value={transactionCustomer}
-            onChange={e => setTransactionCustomer(e.target.value)}
-            disabled={isSubmittingTransaction}
-          />
+            <div>
+              <label htmlFor="transaction-customer">Customer / Notes</label>
+              <input
+                id="transaction-customer"
+                type="text"
+                placeholder={transactionMode === 'update-stock' ? 'Optional supplier or source' : 'Optional customer name or note'}
+                value={transactionCustomer}
+                onChange={e => setTransactionCustomer(e.target.value)}
+                disabled={isSubmittingTransaction}
+              />
+            </div>
 
-          <label htmlFor="transaction-timestamp">Transaction Date</label>
-          <input
-            id="transaction-timestamp"
-            type="datetime-local"
-            value={transactionTimestamp}
-            onChange={e => setTransactionTimestamp(e.target.value)}
-            disabled={isSubmittingTransaction}
-          />
+            <div>
+              <label htmlFor="transaction-timestamp">Transaction Date</label>
+              <input
+                id="transaction-timestamp"
+                type="datetime-local"
+                value={transactionTimestamp}
+                onChange={e => setTransactionTimestamp(e.target.value)}
+                disabled={isSubmittingTransaction}
+              />
+            </div>
+          </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
             <button type="submit" className="primary-btn" disabled={isSubmittingTransaction}>
               {isSubmittingTransaction ? 'Saving...' : 'Save Transaction'}
+            </button>
+          </div>
+        </form>
+      </FloatingCard>
+
+      <FloatingCard
+        open={isModifyModalOpen}
+        onClose={() => setIsModifyModalOpen(false)}
+        title="Modify Existing Record"
+      >
+        <NotificationBean type={modifyNotification?.type} message={modifyNotification?.message} />
+        <form className="form-shell" onSubmit={handleModifyRecordSubmit}>
+          <label htmlFor="modify-stock" style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '0.5rem', display: 'block', color: '#1e293b' }}>Select Stock Listing</label>
+          <select 
+            id="modify-stock" 
+            value={selectedStockId} 
+            onChange={handleStockSelect} 
+            required 
+            disabled={isSubmittingModify}
+            style={{ padding: '0.75rem', fontSize: '1.05rem', width: '100%', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', marginBottom: '1.25rem', cursor: 'pointer' }}
+          >
+            <option value="">-- Select Stock --</option>
+            {stocks.map(s => (
+              <option key={s.stock_id} value={s.stock_id}>{s.name} ({s.quality_grade})</option>
+            ))}
+          </select>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0 1rem' }}>
+            <div>
+              <label htmlFor="modify-physical">Total Physical Volume (Sacks)</label>
+              <input id="modify-physical" type="number" step="1" min="0" value={modifyPhysical} onChange={e => setModifyPhysical(e.target.value)} required disabled={isSubmittingModify || !selectedStockId} />
+            </div>
+
+            <div>
+              <label htmlFor="modify-allocated">Allocated Volume (Sacks)</label>
+              <input id="modify-allocated" type="number" step="1" min="0" value={modifyAllocated} onChange={e => setModifyAllocated(e.target.value)} required disabled={isSubmittingModify || !selectedStockId} />
+            </div>
+
+            <div>
+              <label htmlFor="modify-price">Est. Wholesale Price (₱)</label>
+              <input id="modify-price" type="number" step="0.01" min="0" value={modifyPrice} onChange={e => setModifyPrice(e.target.value)} required disabled={isSubmittingModify || !selectedStockId} />
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <p style={{ margin: '0.25rem 0 1rem', color: '#64748b', fontSize: '0.9rem', lineHeight: '1.4' }}>
+                Only changed fields are logged, so updating both allocated volume and price creates two inventory log entries.
+              </p>
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label htmlFor="modify-reference">Reference ID / Notes (Optional)</label>
+              <input id="modify-reference" type="text" placeholder="e.g., Audit or correction" value={modifyReferenceId} onChange={e => setModifyReferenceId(e.target.value)} disabled={isSubmittingModify || !selectedStockId} />
+              
+              <p style={{ margin: '0.5rem 0 0', color: '#64748b', fontSize: '0.9rem', lineHeight: '1.4' }}>
+                The correction time is recorded automatically when you save the changes.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+            <button type="submit" className="primary-btn" disabled={isSubmittingModify || !selectedStockId}>
+              {isSubmittingModify ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>
