@@ -67,7 +67,7 @@ export default function Edit() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     let isActive = true;

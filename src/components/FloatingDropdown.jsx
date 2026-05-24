@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 function normalizeItems(items) {
   return Array.isArray(items) ? items : [];
@@ -36,7 +36,7 @@ export default function FloatingDropdown({
     return base.join(' ');
   }, [align, className]);
 
-  const setOpen = nextOpen => {
+  const setOpen = useCallback((nextOpen) => {
     if (!isControlled) {
       setUncontrolledOpen(nextOpen);
     }
@@ -44,7 +44,7 @@ export default function FloatingDropdown({
     if (onOpenChange) {
       onOpenChange(nextOpen);
     }
-  };
+  }, [isControlled, onOpenChange]);
 
   useEffect(() => {
     const handlePointerDown = event => {
@@ -66,7 +66,7 @@ export default function FloatingDropdown({
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isControlled, onOpenChange]);
+  }, [isControlled, onOpenChange, setOpen]);
 
   const handleItemClick = item => {
     if (item.disabled) {

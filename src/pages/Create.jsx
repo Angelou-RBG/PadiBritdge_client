@@ -67,7 +67,7 @@ export default function Create() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [user?.id]);
 
   const selectedPostType = useMemo(
     () => postTypes.find((option) => String(option.id) === String(postTypeId)) || null,

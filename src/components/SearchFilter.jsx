@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getPostTypes, getTags, getTransactionTypes } from '../services/api';
+import { getPostTypes, getTransactionTypes } from '../services/api';
 import { useFilters } from '../context/FilterContext';
 
 const HISTORY_SECTIONS = [
