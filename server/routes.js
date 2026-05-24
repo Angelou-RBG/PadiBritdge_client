@@ -1283,7 +1283,7 @@ router.put('/api/order-rfqs/:id', (request, response) => {
         return response.status(400).json({ message: 'Invalid status.' })
     }
 
-    db.get(`SELECT o.*, sl.wholesale_price, rv.name AS variety_name FROM order_rfqs o LEFT JOIN stock_listing sl ON o.miller_id = sl.user_id AND o.variety_id = sl.variety_id LEFT JOIN rice_varieties rv ON o.variety_id = rv.variety_id WHERE o.order_id = ?`, [orderId], (error, order) => {
+    db.get(`SELECT * FROM order_rfqs WHERE order_id = ?`, [orderId], (error, order) => {
         if (error) return sendDatabaseError(response, error)
         if (!order) return response.status(404).json({ message: 'Order not found.' })
 
@@ -1291,92 +1291,95 @@ router.put('/api/order-rfqs/:id', (request, response) => {
             return response.json({ message: 'Order status updated successfully.' })
         }
 
-        db.run('BEGIN TRANSACTION', (beginError) => {
-            if (beginError) return sendDatabaseError(response, beginError)
+        db.all(`SELECT ori.*, sl.wholesale_price, rv.name AS variety_name FROM order_rfq_items ori LEFT JOIN stock_listing sl ON ? = sl.user_id AND ori.variety_id = sl.variety_id LEFT JOIN rice_varieties rv ON ori.variety_id = rv.variety_id WHERE ori.order_id = ?`, [order.miller_id, orderId], (itemsError, items) => {
+            if (itemsError) return sendDatabaseError(response, itemsError)
+            db.run('BEGIN TRANSACTION', (beginError) => {
+                if (beginError) return sendDatabaseError(response, beginError)
+                db.run(`UPDATE order_rfqs SET status = ? WHERE order_id = ?`, [status, orderId], (updateError) => {
+                    if (updateError) return db.run('ROLLBACK', () => sendDatabaseError(response, updateError))
 
-            db.run(`UPDATE order_rfqs SET status = ? WHERE order_id = ?`, [status, orderId], (updateError) => {
-                if (updateError) return db.run('ROLLBACK', () => sendDatabaseError(response, updateError))
-
-                if (status === 'Approved' && order.status !== 'Approved') {
-                    db.run(
-                        `UPDATE stock_listing SET allocated_sacks = allocated_sacks + ?, last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`,
-                        [order.requested_sacks, order.miller_id, order.variety_id],
-                        (stockError) => {
-                            if (stockError) return db.run('ROLLBACK', () => sendDatabaseError(response, stockError))
-                            db.run('COMMIT', (commitError) => {
-                                if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
-                                return response.json({ message: 'Order approved and stock allocated.' })
+                    if (status === 'Approved' && order.status !== 'Approved') {
+                        let pending = items.length; let hasError = false;
+                        if (pending === 0) return db.run('COMMIT', () => response.json({ message: 'Order approved.' }));
+                        items.forEach(item => {
+                            db.run(`UPDATE stock_listing SET allocated_sacks = allocated_sacks + ?, last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`, [item.requested_sacks, order.miller_id, item.variety_id], (stockError) => {
+                                if (hasError) return;
+                                if (stockError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, stockError)); }
+                                pending--;
+                                if (pending === 0) return db.run('COMMIT', () => response.json({ message: 'Order approved and stock allocated.' }))
                             })
-                        }
-                    )
-                } else if (status === 'Fulfilled' && order.status !== 'Fulfilled') {
-                    db.run(
-                        `INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
-                        [order.miller_id, 'SALE', referenceId || `RFQ-${orderId}`, order.buyer_id, timestamp || null],
-                        function (txError) {
+                        })
+                    } else if (status === 'Fulfilled' && order.status !== 'Fulfilled') {
+                        db.run(`INSERT INTO transactions (user_id, transaction_type, reference_id, customer_id, timestamp) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`, [order.miller_id, 'SALE', referenceId || `RFQ-${orderId}`, order.buyer_id, timestamp || null], function (txError) {
                             if (txError) return db.run('ROLLBACK', () => sendDatabaseError(response, txError))
                             const txId = this.lastID
-                            
-                            db.run(
-                                `INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`,
-                                [txId, order.variety_id, -Math.abs(order.requested_sacks)],
-                                (invError) => {
-                                    if (invError) return db.run('ROLLBACK', () => sendDatabaseError(response, invError))
-                                    
-                                    db.run(
-                                        `UPDATE stock_listing SET allocated_sacks = MAX(0, allocated_sacks - ?), physical_sacks = MAX(0, physical_sacks - ?), last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`,
-                                        [order.requested_sacks, order.requested_sacks, order.miller_id, order.variety_id],
-                                        (stockError) => {
-                                            if (stockError) return db.run('ROLLBACK', () => sendDatabaseError(response, stockError))
-                                            
-                                            db.run(
-                                                `INSERT INTO receipts (transaction_id, item, item_quantity, cost, date) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`,
-                                                [txId, order.variety_name, order.requested_sacks, order.requested_sacks * (order.wholesale_price || 0), timestamp || null],
-                                                (receiptError) => {
-                                                    if (receiptError) return db.run('ROLLBACK', () => sendDatabaseError(response, receiptError))
-                                                    db.run('COMMIT', (commitError) => {
-                                                        if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
-                                                        return response.json({ message: 'Order fulfilled successfully.' })
-                                                    })
-                                                }
-                                            )
-                                        }
-                                    )
-                                }
-                            )
-                        }
-                    )
-                } else {
-                    db.run('COMMIT', (commitError) => {
-                        if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError))
-                        return response.json({ message: 'Order status updated successfully.' })
-                    })
-                }
+                            let pending = items.length; let hasError = false;
+                            if (pending === 0) return db.run('COMMIT', () => response.json({ message: 'Order fulfilled.' }));
+                            items.forEach(item => {
+                                db.run(`INSERT INTO inventory_logs (transaction_id, variety_id, quantity_change) VALUES (?, ?, ?)`, [txId, item.variety_id, -Math.abs(item.requested_sacks)], (invError) => {
+                                    if (hasError) return;
+                                    if (invError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, invError)); }
+                                    db.run(`UPDATE stock_listing SET allocated_sacks = MAX(0, allocated_sacks - ?), physical_sacks = MAX(0, physical_sacks - ?), last_updated = datetime('now', 'localtime') WHERE user_id = ? AND variety_id = ?`, [item.requested_sacks, item.requested_sacks, order.miller_id, item.variety_id], (stockError) => {
+                                        if (hasError) return;
+                                        if (stockError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, stockError)); }
+                                        db.run(`INSERT INTO receipts (transaction_id, item, item_quantity, cost, date) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now', 'localtime')))`, [txId, item.variety_name, item.requested_sacks, item.requested_sacks * (item.wholesale_price || 0), timestamp || null], (receiptError) => {
+                                            if (hasError) return;
+                                            if (receiptError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, receiptError)); }
+                                            pending--;
+                                            if (pending === 0) return db.run('COMMIT', () => response.json({ message: 'Order fulfilled successfully.' }))
+                                        })
+                                    })
+                                })
+                            })
+                        })
+                    } else {
+                        db.run('COMMIT', () => response.json({ message: 'Order status updated successfully.' }))
+                    }
+                })
             })
         })
     })
 })
 
 router.post('/api/external-rfqs', (request, response) => {
-    const { buyerName, millerId, varietyId, requestedSacks, fulfillmentDeadline } = request.body || {}
+    const { buyerName, millerId, items, fulfillmentDeadline } = request.body || {}
 
-    if (!buyerName || !millerId || !varietyId || requestedSacks === undefined || !fulfillmentDeadline) {
+    if (!buyerName || !millerId || !items || !items.length || !fulfillmentDeadline) {
         return response.status(400).json({ message: 'Missing required fields for external allocation request.' })
     }
 
-    const sacks = Number(requestedSacks)
-    if (!Number.isInteger(sacks) || sacks <= 0) {
-        return response.status(400).json({ message: 'Requested sacks must be a positive integer.' })
-    }
+    db.run('BEGIN TRANSACTION', (beginError) => {
+        if (beginError) return sendDatabaseError(response, beginError)
+        db.run(
+            `INSERT INTO external_rfqs (buyer_name, miller_id, fulfillment_deadline, status) VALUES (?, ?, ?, 'Pending')`,
+            [buyerName, millerId, fulfillmentDeadline],
+            function (insertError) {
+                if (insertError) return db.run('ROLLBACK', () => sendDatabaseError(response, insertError))
+                const orderId = this.lastID
 
-    db.run(
-        `INSERT INTO external_rfqs (buyer_name, miller_id, variety_id, requested_sacks, fulfillment_deadline, status) VALUES (?, ?, ?, ?, ?, 'Pending')`,
-        [buyerName, millerId, varietyId, sacks, fulfillmentDeadline],
-        function (insertError) {
-            if (insertError) return sendDatabaseError(response, insertError)
-            return response.status(201).json({ orderId: this.lastID })
-        }
-    )
+                let pending = items.length;
+                let hasError = false;
+
+                items.forEach(item => {
+                    db.run(
+                        `INSERT INTO external_rfq_items (order_id, variety_id, requested_sacks) VALUES (?, ?, ?)`,
+                        [orderId, item.varietyId, item.requestedSacks],
+                        (itemError) => {
+                            if (hasError) return;
+                            if (itemError) { hasError = true; return db.run('ROLLBACK', () => sendDatabaseError(response, itemError)); }
+                            pending--;
+                            if (pending === 0) {
+                                db.run('COMMIT', (commitError) => {
+                                    if (commitError) return db.run('ROLLBACK', () => sendDatabaseError(response, commitError));
+                                    return response.status(201).json({ orderId });
+                                })
+                            }
+                        }
+                    )
+                })
+            }
+        )
+    })
 })
 
 router.get('/api/external-rfqs', (request, response) => {

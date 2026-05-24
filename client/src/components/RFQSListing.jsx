@@ -186,8 +186,8 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
             <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order ID</th>
             <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date Recorded</th>
             <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{isExternal ? 'Buyer Name' : 'Buyer ID'}</th>
-            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Variety</th>
-            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Requested Sacks</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Items</th>
+            <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Sacks</th>
             <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Deadline</th>
             <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
             <th style={{ padding: '14px 20px', color: '#475569', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Actions</th>
@@ -200,8 +200,14 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
                 <td style={{ padding: '16px 20px', fontWeight: '600', color: '#0f172a' }}>#{rfq.order_id}</td>
                 <td style={{ padding: '16px 20px', color: '#64748b', fontSize: '0.9rem' }}>{rfq.date_recorded ? new Date(rfq.date_recorded).toLocaleDateString() : 'N/A'}</td>
                 <td style={{ padding: '16px 20px', color: '#334155' }}>{isExternal ? rfq.buyer_name : rfq.buyer_id}</td>
-                <td style={{ padding: '16px 20px', color: '#334155' }}>{rfq.variety_name} <span style={{ fontSize: '0.8rem', color: '#64748b' }}>({rfq.quality_grade})</span></td>
-                <td style={{ padding: '16px 20px', color: '#059669', fontWeight: '600' }}>{rfq.requested_sacks} sacks</td>
+                <td style={{ padding: '16px 20px', color: '#334155' }}>
+                  <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
+                    {rfq.items && rfq.items.map((item, idx) => (
+                      <li key={idx}>{item.variety_name} <span style={{ color: '#64748b' }}>({item.quality_grade})</span> - {item.requested_sacks} sacks</li>
+                    ))}
+                  </ul>
+                </td>
+                <td style={{ padding: '16px 20px', color: '#059669', fontWeight: '600' }}>{rfq.items ? rfq.items.reduce((sum, item) => sum + item.requested_sacks, 0) : 0} sacks</td>
                 <td style={{ padding: '16px 20px', color: '#b91c1c', fontWeight: '500', fontSize: '0.9rem' }}>{rfq.fulfillment_deadline ? new Date(rfq.fulfillment_deadline).toLocaleDateString() : 'Not Set'}</td>
                 <td style={{ padding: '16px 20px' }}>
                   <span style={{ 
@@ -361,6 +367,7 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
                 <label style={{ fontSize: '0.8rem', display: 'block', color: '#475569' }}>Sacks</label>
                 <input type="number" min="1" step="1" value={tempQuantity} onChange={e => setTempQuantity(e.target.value)} disabled={isSubmittingAdd} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
               </div>
+              <button type="button" onClick={handleAddItem} className="ghost-btn" style={{ padding: '0.5rem' }}>Add Item</button>
               <button type="button" onClick={handleAddItem} className="primary-btn" style={{ padding: '0.55rem 1rem', height: '36px' }}>Add</button>
             </div>
           </div>
