@@ -3,6 +3,7 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
 
 # Build outputs
 client/build/
@@ -17,6 +18,8 @@ dist/
 
 # Environment files
 .env
+.env.*
+!.env.example
 .env.*.local
 
 # Server
@@ -27,12 +30,18 @@ server/db/PadiBridge.db
 
 # Logs
 logs/
+logs
 *.log
 pids/
+pids
 *.pid
+*.seed
+*.pid.lock
 
 # Coverage
 coverage/
+*.lcov
+.nyc_output
 
 # Editor directories and OS files
 .DS_Store
@@ -41,7 +50,64 @@ Thumbs.db
 .idea/
 
 # Misc
+lib-cov
 .cache/
+.cache
 .parcel-cache/
-npm-debug.log*
-yarn-error.log*
+.npm
+.eslintcache
+.stylelintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Snowpack dependency directory
+web_modules/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Build tool caches
+.next
+out
+.nuxt
+.output
+.vuepress/dist
+.temp
+.svelte-kit/
+**/.vitepress/dist
+**/.vitepress/cache
+.docusaurus
+.serverless/
+.fusebox/
+.dynamodb/
+.firebase/
+.tern-port
+.vscode-test
+.pnpm-store
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+.vite/
+
+# Gatsby files
+.cache/
+# Comment in the public line in if your project uses Gatsby and not Next.js
+# https://nextjs.org/blog/next-9-1#public-directory-support
+# public
+
+# vuepress build output
+.vuepress/dist
+
+# dotenv environment variable files
+.env.*
