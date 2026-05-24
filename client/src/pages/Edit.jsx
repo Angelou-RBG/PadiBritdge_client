@@ -21,6 +21,7 @@ export default function Edit() {
   const [hasHydratedForm, setHasHydratedForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [attachmentType, setAttachmentType] = useState('none');
 
   useEffect(() => {
     let isActive = true;
@@ -95,6 +96,7 @@ export default function Edit() {
 
     setTitle(post.title || '');
     setTextBody(post.textBody || '');
+    setAttachmentType(post.attachmentType || 'none');
 
     const matchedPostType = postTypes.find((option) => option.name === post.postType);
     setPostTypeId(matchedPostType ? String(matchedPostType.id) : '');
@@ -157,6 +159,7 @@ export default function Edit() {
         postTypeId: String(postTypeId),
         tagIds: JSON.stringify(selectedTagIds.map((tagId) => Number(tagId))),
         textBody: textBody.trim(),
+        attachmentType,
       });
 
       navigate(`/post/${id}`, {
@@ -286,6 +289,20 @@ export default function Edit() {
             ) : null}
           </label>
         </div>
+
+        {selectedPostType?.name === 'PadiConnect' ? (
+          <div className="create-field" style={{ marginBottom: '1rem' }}>
+            <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={attachmentType === 'stock_listing'}
+                onChange={(e) => setAttachmentType(e.target.checked ? 'stock_listing' : 'none')}
+                disabled={isLoadingLookups || isLoadingPost || isSubmitting}
+              />
+              Show stock listing table
+            </label>
+          </div>
+        ) : null}
 
         <label className="create-field">
           <span className="create-label">Text Body</span>

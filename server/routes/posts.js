@@ -50,6 +50,7 @@ router.get('/api/posts', (request, response) => {
             posts.tags,
             posts.status,
             posts.text_body,
+            posts.attachment_type,
             posts.date_created,
             users.full_name
          FROM posts
@@ -88,6 +89,7 @@ router.get('/api/posts/latest', (request, response) => {
             posts.post_type,
             posts.tags,
             posts.text_body,
+            posts.attachment_type,
             posts.date_created,
             users.full_name
          FROM posts
@@ -132,6 +134,7 @@ router.get('/api/posts/:id', (request, response) => {
             posts.tags,
             posts.status,
             posts.text_body,
+            posts.attachment_type,
             posts.date_created,
             users.full_name
          FROM posts
@@ -312,10 +315,11 @@ router.put('/api/posts/:id', (request, response) => {
         return response.status(400).json({ message: 'Valid post id is required.' })
     }
 
-    const { title, postTypeId, tagIds, textBody } = request.body || {}
+    const { title, postTypeId, tagIds, textBody, attachmentType } = request.body || {}
     const normalizedTitle = String(title || '').trim()
     const normalizedTextBody = String(textBody || '').trim()
     const normalizedPostTypeId = Number(postTypeId)
+    const normalizedAttachmentType = String(attachmentType || 'none').trim()
     const normalizedTagIds = parseTagIds(tagIds)
         .map((tagId) => Number(tagId))
         .filter((tagId) => Number.isInteger(tagId) && tagId > 0)
@@ -399,9 +403,9 @@ router.put('/api/posts/:id', (request, response) => {
 
                         db.run(
                             `UPDATE posts
-                             SET title = ?, post_type = ?, tags = ?, text_body = ?
+                             SET title = ?, post_type = ?, tags = ?, text_body = ?, attachment_type = ?
                              WHERE post_id = ?`,
-                            [normalizedTitle, postTypeRow.name, tagValue, normalizedTextBody, postId],
+                            [normalizedTitle, postTypeRow.name, tagValue, normalizedTextBody, normalizedAttachmentType, postId],
                             (updateError) => {
                                 if (updateError) {
                                     return sendDatabaseError(response, updateError)
@@ -416,6 +420,7 @@ router.put('/api/posts/:id', (request, response) => {
                                         tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
                                         status: postRow.status,
                                         textBody: normalizedTextBody,
+                                        attachmentType: normalizedAttachmentType,
                                     },
                                 })
                             }
@@ -448,11 +453,12 @@ router.post('/api/posts', (request, response) => {
         }
 
         const uploadedFiles = Array.isArray(request.files) ? request.files : []
-        const { userId, title, postTypeId, tagIds, textBody } = request.body || {}
+        const { userId, title, postTypeId, tagIds, textBody, attachmentType } = request.body || {}
 
         const normalizedTitle = String(title || '').trim()
         const normalizedTextBody = String(textBody || '').trim()
         const normalizedUserId = Number(userId)
+        const normalizedAttachmentType = String(attachmentType || 'none').trim()
         const normalizedPostTypeId = Number(postTypeId)
         const normalizedTagIds = parseTagIds(tagIds)
             .map((tagId) => Number(tagId))
@@ -532,8 +538,8 @@ router.post('/api/posts', (request, response) => {
                         }
 
                         db.run(
-                            'INSERT INTO posts (user_id, title, post_type, tags, status, text_body) VALUES (?, ?, ?, ?, ?, ?)',
-                            [normalizedUserId, normalizedTitle, postTypeRow.name, tagValue, 'not', normalizedTextBody],
+                            'INSERT INTO posts (user_id, title, post_type, tags, status, text_body, attachment_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                            [normalizedUserId, normalizedTitle, postTypeRow.name, tagValue, 'not', normalizedTextBody, normalizedAttachmentType],
                             function (insertError) {
                                 if (insertError) {
                                     cleanupUploadedFiles(uploadedFiles)
@@ -583,6 +589,7 @@ router.post('/api/posts', (request, response) => {
                                                         tags: tagValue ? tagValue.split(', ').filter(Boolean) : [],
                                                         status: 'not',
                                                         textBody: normalizedTextBody,
+                                                        attachmentType: normalizedAttachmentType,
                                                         images: insertedImages,
                                                     },
                                                 })

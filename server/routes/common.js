@@ -74,6 +74,7 @@ function mapPostRow(row, images = []) {
         tags,
         status: row.status || 'not',
         textBody: row.text_body,
+        attachmentType: row.attachment_type || 'none',
         dateCreated: row.date_created,
         images,
     }

@@ -5,7 +5,7 @@ import FloatingDropdown from '../components/FloatingDropdown';
 import DeletePostCard from '../components/DeletePostCard';
 import NotificationBean from '../components/NotificationBean';
 import { useAuth } from '../context/AuthContext';
-import { deletePost, getPost } from '../services/api';
+import { deletePost, getPost, getStockListings } from '../services/api';
 import { getTagStyle, normalizeTag } from '../utils/tagTheme';
 import './Post.css';
 
@@ -48,6 +48,7 @@ export default function Post() {
   const [notification, setNotification] = useState(null);
   const [isDeleteCardOpen, setIsDeleteCardOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [millerStocks, setMillerStocks] = useState([]);
 
   useEffect(() => {
     let isActive = true;
@@ -61,6 +62,17 @@ export default function Post() {
         }
 
         setPost(data?.post || null);
+
+        if (data?.post?.postType === 'PadiConnect' && data?.post?.attachmentType === 'stock_listing') {
+          try {
+            const stocksData = await getStockListings({ userId: data.post.user_id || data.post.userId });
+            if (isActive) {
+              setMillerStocks(stocksData?.stockListings || []);
+            }
+          } catch (e) {
+            console.error('Failed to load stock listing', e);
+          }
+        }
       } catch (error) {
         if (isActive) {
           setNotification({
@@ -89,6 +101,7 @@ export default function Post() {
   const isCurrentUser = Boolean(currentUserId && postOwnerId && currentUserId === postOwnerId);
   const postId = String(post?.post_id || id || '');
   const isDeleted = post?.status === 'deleted';
+  const isPadiConnect = post?.postType === 'PadiConnect';
 
   const dropdownItems = useMemo(() => {
     const items = [
@@ -240,6 +253,42 @@ export default function Post() {
           ))}
         </div>
       ) : null}
+
+      {isPadiConnect && post?.attachmentType === 'stock_listing' && millerStocks.length > 0 && (
+        <div className="post-stock-table-container" style={{ marginTop: '1.5rem', marginBottom: '1.5rem' }}>
+          <h4 style={{ marginBottom: '0.75rem' }}>Available Stock</h4>
+          <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', minWidth: '600px' }}>
+              <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <tr>
+                  <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', fontSize: '0.85rem' }}>Rice Brand / Variety</th>
+                  <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', fontSize: '0.85rem' }}>Quality Grade</th>
+                  <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', fontSize: '0.85rem' }}>Available Volume</th>
+                  <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', fontSize: '0.85rem' }}>Est. Wholesale Price (₱)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {millerStocks.map((stock) => (
+                  <tr key={stock.stock_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: '500', color: '#0f172a' }}>{stock.name}</td>
+                    <td style={{ padding: '12px 16px', color: '#334155' }}>{stock.quality_grade}</td>
+                    <td style={{ padding: '12px 16px', color: '#059669', fontWeight: '500' }}>{(stock.physical_sacks || 0) - (stock.allocated_sacks || 0)} sacks</td>
+                    <td style={{ padding: '12px 16px', color: '#0f172a' }}>₱{Number(stock.wholesale_price).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {!isCurrentUser && (
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+              <button type="button" className="ghost-btn">Contact Miller</button>
+              <button type="button" className="primary-btn" onClick={() => navigate(`/reserve/${postId}`)}>Reserve Stock</button>
+              <button type="button" className="primary-btn" style={{ backgroundColor: '#2563eb' }}>Purchase Stock with PadiConnect</button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="post-page-body">{post?.textBody || 'No post body available.'}</div>
 

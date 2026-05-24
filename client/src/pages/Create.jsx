@@ -23,6 +23,7 @@ export default function Create() {
   const [isLoadingLookups, setIsLoadingLookups] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [attachmentType, setAttachmentType] = useState('none');
 
   useEffect(() => {
     let isActive = true;
@@ -132,6 +133,7 @@ export default function Create() {
       formData.append('postTypeId', String(postTypeId));
       formData.append('tagIds', JSON.stringify(selectedTagIds.map((tagId) => Number(tagId))));
       formData.append('textBody', textBody.trim());
+      formData.append('attachmentType', attachmentType);
 
       selectedImages.forEach((file) => {
         formData.append('images', file);
@@ -251,6 +253,20 @@ export default function Create() {
             ) : null}
           </label>
         </div>
+
+        {selectedPostType?.name === 'PadiConnect' ? (
+          <div className="create-field" style={{ marginBottom: '1rem' }}>
+            <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={attachmentType === 'stock_listing'}
+                onChange={(e) => setAttachmentType(e.target.checked ? 'stock_listing' : 'none')}
+                disabled={isLoadingLookups || isSubmitting}
+              />
+              Show stock listing table
+            </label>
+          </div>
+        ) : null}
 
         <label className="create-field">
           <span className="create-label">Images</span>

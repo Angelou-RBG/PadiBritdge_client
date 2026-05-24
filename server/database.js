@@ -140,6 +140,7 @@ function initializeDatabase(callback) {
                 tags TEXT,
                 status TEXT NOT NULL DEFAULT 'not',
                 text_body TEXT NOT NULL,
+                attachment_type TEXT DEFAULT 'none',
                 date_created TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
@@ -330,6 +331,16 @@ function initializeDatabase(callback) {
 
             if (!existingColumns.has('logged_at')) {
                 db.run(`ALTER TABLE inventory_logs ADD COLUMN logged_at TEXT`, handleErr('inventory_logs'))
+            }
+        })
+
+        db.all(`PRAGMA table_info(posts)`, (err, columns) => {
+            if (err) {
+                return handleErr('posts')(err)
+            }
+            const existingColumns = new Set((columns || []).map((column) => column.name))
+            if (!existingColumns.has('attachment_type')) {
+                db.run(`ALTER TABLE posts ADD COLUMN attachment_type TEXT DEFAULT 'none'`, handleErr('posts'))
             }
         })
 
