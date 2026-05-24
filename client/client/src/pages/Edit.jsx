@@ -1,31 +1,36 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { createPost, getPostTypes, getTags, getAddresses } from '../services/api';
+import { useNavigate, useParams } from 'react-router-dom';
 import NotificationBean from '../components/NotificationBean';
+import { updatePost, getPost, getPostTypes, getTags, getAddresses } from '../services/api';
 import { getTagStyle } from '../utils/tagTheme';
+import { useAuth } from '../context/AuthContext';
 import './Create.css';
 
 const MAX_IMAGE_COUNT = 5;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
-export default function Create() {
+export default function Edit() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [postTypeId, setPostTypeId] = useState('');
   const [tagPickerValue, setTagPickerValue] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState([]);
-  const [selectedImages, setSelectedImages] = useState([]);
   const [textBody, setTextBody] = useState('');
+  const [post, setPost] = useState(null);
   const [postTypes, setPostTypes] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [addressId, setAddressId] = useState('');
   const [isLoadingLookups, setIsLoadingLookups] = useState(true);
+  const [isLoadingPost, setIsLoadingPost] = useState(true);
+  const [hasHydratedForm, setHasHydratedForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
   const [attachmentType, setAttachmentType] = useState('none');
+  const [existingImages, setExistingImages] = useState([]);
+  const [selectedImages, setSelectedImages] = useState([]);
   const [showLocation, setShowLocation] = useState(false);
 
   useEffect(() => {
@@ -45,12 +50,7 @@ export default function Create() {
 
         setPostTypes(Array.isArray(postTypesResponse?.postTypes) ? postTypesResponse.postTypes : []);
         setAvailableTags(Array.isArray(tagsResponse?.tags) ? tagsResponse.tags : []);
-        
-        const userAddresses = Array.isArray(addressesResponse) ? addressesResponse : [];
-        setAddresses(userAddresses);
-        const defaultAddress = userAddresses.find(a => a.isDefault);
-        if (defaultAddress) setAddressId(String(defaultAddress.id));
-
+        setAddresses(Array.isArray(addressesResponse) ? addressesResponse : []);
       } catch (error) {
         if (isActive) {
           setNotification({ type: 'error', message: error.response?.data?.message || 'Something went Wrong' });
@@ -67,7 +67,67 @@ export default function Create() {
     return () => {
       isActive = false;
     };
-  }, [user?.id]);
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadPost() {
+      try {
+        const data = await getPost(id);
+
+        if (!isActive) {
+          return;
+        }
+
+        setPost(data?.post || null);
+      } catch (error) {
+        if (isActive) {
+          setNotification({ type: 'error', message: error.response?.data?.message || 'Something went Wrong' });
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingPost(false);
+        }
+      }
+    }
+
+    loadPost();
+
+    return () => {
+      isActive = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (hasHydratedForm || isLoadingLookups || isLoadingPost || !post) {
+      return;
+    }
+
+    if (post.status === 'deleted') {
+      setHasHydratedForm(true);
+      return;
+    }
+
+    setTitle(post.title || '');
+    setTextBody(post.textBody || '');
+    setAttachmentType(post.attachmentType || 'none');
+    setExistingImages(post.images || []);
+    
+    const initialAddressId = post.address_id ? String(post.address_id) : (post.addressId ? String(post.addressId) : '');
+    setAddressId(initialAddressId);
+    setShowLocation(Boolean(initialAddressId));
+
+    const matchedPostType = postTypes.find((option) => option.name === post.postType);
+    setPostTypeId(matchedPostType ? String(matchedPostType.id) : '');
+
+    const nextTagIds = Array.isArray(post.tags)
+      ? post.tags.map(String)
+      : [];
+
+    setSelectedTagIds(nextTagIds);
+    setHasHydratedForm(true);
+  }, [availableTags, hasHydratedForm, isLoadingLookups, isLoadingPost, post, postTypes]);
 
   const selectedPostType = useMemo(
     () => postTypes.find((option) => String(option.id) === String(postTypeId)) || null,
@@ -102,9 +162,9 @@ export default function Create() {
   function handleImageChange(event) {
     const nextFiles = Array.from(event.target.files || []);
 
-    if (nextFiles.length > MAX_IMAGE_COUNT) {
+    if (nextFiles.length + existingImages.length + selectedImages.length > MAX_IMAGE_COUNT) {
       event.target.value = '';
-      setNotification({ type: 'error', message: `You can upload up to ${MAX_IMAGE_COUNT} images.` });
+      setNotification({ type: 'error', message: `You can upload up to ${MAX_IMAGE_COUNT} images in total.` });
       return;
     }
 
@@ -116,21 +176,20 @@ export default function Create() {
       return;
     }
 
-    setSelectedImages(nextFiles);
+    setSelectedImages((prev) => [...prev, ...nextFiles]);
   }
 
-  function handleRemoveImage(indexToRemove) {
-    setSelectedImages((previousFiles) => previousFiles.filter((_, index) => index !== indexToRemove));
+  function handleRemoveExistingImage(indexToRemove) {
+    setExistingImages((prev) => prev.filter((_, index) => index !== indexToRemove));
+  }
+
+  function handleRemoveSelectedImage(indexToRemove) {
+    setSelectedImages((prev) => prev.filter((_, index) => index !== indexToRemove));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setNotification(null);
-
-    if (!user?.id) {
-      setNotification({ type: 'error', message: 'Something went Wrong' });
-      return;
-    }
 
     if (!title.trim() || !postTypeId || !textBody.trim()) {
       setNotification({ type: 'error', message: 'Something went Wrong' });
@@ -141,26 +200,27 @@ export default function Create() {
       setIsSubmitting(true);
 
       const formData = new FormData();
-      formData.append('userId', String(user.id));
       formData.append('title', title.trim());
       formData.append('postTypeId', String(postTypeId));
       formData.append('tagIds', JSON.stringify(selectedTagIds.map((tagId) => Number(tagId))));
       formData.append('textBody', textBody.trim());
       formData.append('attachmentType', attachmentType);
+      formData.append('retainedImageIds', JSON.stringify(existingImages.map(img => img.id)));
       if (showLocation && addressId) formData.append('addressId', addressId);
+      if (!showLocation || !addressId) formData.append('removeAddress', 'true');
 
       selectedImages.forEach((file) => {
         formData.append('images', file);
       });
 
-      await createPost(formData);
+      await updatePost(id, formData);
 
-      navigate('/feed', {
+      navigate(`/post/${id}`, {
         replace: true,
         state: {
           flash: {
             type: 'success',
-            message: 'Posted Successfully',
+            message: 'Post updated successfully',
           },
         },
       });
@@ -174,9 +234,22 @@ export default function Create() {
     }
   }
 
+  if (post?.status === 'deleted') {
+    return (
+      <section className="create-page-shell">
+        <NotificationBean type="error" message="Post is Unavailable" />
+        <div className="post-page-unavailable">Post is Unavailable</div>
+      </section>
+    );
+  }
+
   return (
     <section className="create-page-shell">
-      <h2 className="create-page-title">Create Post</h2>
+      <button type="button" className="ghost-btn post-back-btn" onClick={() => navigate(-1)}>
+        Back
+      </button>
+
+      <h2 className="create-page-title">Edit Post</h2>
 
       <NotificationBean type={notification?.type} message={notification?.message} />
 
@@ -188,16 +261,17 @@ export default function Create() {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Enter post title"
-            disabled={isLoadingLookups || isSubmitting}
+            disabled={isLoadingLookups || isLoadingPost || isSubmitting}
           />
         </label>
+
         <div className="create-inline-fields">
           <label className="create-field">
             <span className="create-label">Post Type</span>
             <select
               value={postTypeId}
               onChange={(event) => setPostTypeId(event.target.value)}
-              disabled={isLoadingLookups || isSubmitting}
+              disabled={isLoadingLookups || isLoadingPost || isSubmitting}
             >
               <option value="">Choose a post type</option>
               {postTypes.map((option) => (
@@ -206,6 +280,7 @@ export default function Create() {
                 </option>
               ))}
             </select>
+
             {selectedPostType ? (
               <div className="selection-rows" aria-label="Selected post type">
                 <span className="bean-chip">
@@ -236,7 +311,7 @@ export default function Create() {
 
                 handleAddTag(nextTagId);
               }}
-              disabled={isLoadingLookups || isSubmitting}
+              disabled={isLoadingLookups || isLoadingPost || isSubmitting}
             >
               <option value="">Choose a tag</option>
               {availableTags
@@ -281,7 +356,7 @@ export default function Create() {
                 if (defaultAddress) setAddressId(String(defaultAddress.id));
               }
             }}
-            disabled={isLoadingLookups || isSubmitting}
+            disabled={isLoadingLookups || isLoadingPost || isSubmitting}
           />
           Add a location to this post
         </label>
@@ -293,7 +368,7 @@ export default function Create() {
             type="checkbox"
             checked={attachmentType === 'stock_listing'}
             onChange={(e) => setAttachmentType(e.target.checked ? 'stock_listing' : 'none')}
-            disabled={isLoadingLookups || isSubmitting}
+            disabled={isLoadingLookups || isLoadingPost || isSubmitting}
           />
           Show stock listing table
         </label>
@@ -306,7 +381,7 @@ export default function Create() {
         <select
           value={addressId}
           onChange={(event) => setAddressId(event.target.value)}
-          disabled={isLoadingLookups || isSubmitting}
+          disabled={isLoadingLookups || isLoadingPost || isSubmitting}
         >
           {addresses.map((addr) => (
             <option key={addr.id} value={addr.id}>
@@ -324,19 +399,32 @@ export default function Create() {
             accept="image/*"
             multiple
             onChange={handleImageChange}
-            disabled={isLoadingLookups || isSubmitting}
+            disabled={isLoadingLookups || isLoadingPost || isSubmitting}
           />
           <p className="create-image-hint">You can upload up to {MAX_IMAGE_COUNT} images, 5 MB each.</p>
-          {selectedImages.length > 0 ? (
+          {existingImages.length > 0 || selectedImages.length > 0 ? (
             <div className="create-image-list" aria-label="Selected images">
+              {existingImages.map((image, index) => (
+                <div key={`existing-${image.id}`} className="create-image-item">
+                  <span>{image.originalName || `Image ${index + 1}`}</span>
+                  <button
+                    type="button"
+                    className="bean-chip-remove"
+                    onClick={() => handleRemoveExistingImage(index)}
+                    aria-label="Remove existing image"
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
               {selectedImages.map((file, index) => (
-                <div key={`${file.name}-${file.lastModified}`} className="create-image-item">
+                <div key={`new-${file.name}-${file.lastModified}`} className="create-image-item">
                   <span>{file.name}</span>
                   <button
                     type="button"
                     className="bean-chip-remove"
-                    onClick={() => handleRemoveImage(index)}
-                    aria-label={`Remove image ${file.name}`}
+                    onClick={() => handleRemoveSelectedImage(index)}
+                    aria-label={`Remove new image ${file.name}`}
                   >
                     x
                   </button>
@@ -353,12 +441,12 @@ export default function Create() {
             value={textBody}
             onChange={(event) => setTextBody(event.target.value)}
             placeholder="Write your post here"
-            disabled={isLoadingLookups || isSubmitting}
+            disabled={isLoadingLookups || isLoadingPost || isSubmitting}
           />
         </label>
 
-        <button type="submit" className="primary-btn create-confirm-btn" disabled={isLoadingLookups || isSubmitting}>
-          Confirm
+        <button type="submit" className="primary-btn create-confirm-btn" disabled={isLoadingLookups || isLoadingPost || isSubmitting}>
+          Update
         </button>
       </form>
     </section>
