@@ -50,13 +50,25 @@ export default function CommentCell({ postId, comment, allComments = [], onComme
         }
     }
 
+    function handleReplyClick() {
+        const nextIsReplying = !isReplying;
+        setIsReplying(nextIsReplying);
+        
+        if (nextIsReplying && comment.username) {
+            setContent(`@${comment.username} `);
+        } else if (!nextIsReplying) {
+            setContent('');
+            setError('');
+        }
+    }
+
     return (
         <div className="comment-cell">
             <div className="comment-cell-main">
                 <p className="comment-author">{comment.full_name || 'Anonymous'}</p>
                 <p className="comment-content">{comment.content}</p>
                 <div className="comment-actions">
-                    <button type="button" className="primary-btn" onClick={() => setIsReplying(!isReplying)}>
+                    <button type="button" className="primary-btn" onClick={handleReplyClick}>
                         {isReplying ? 'Cancel' : 'Reply'}
                     </button>
                     <FloatingDropdown

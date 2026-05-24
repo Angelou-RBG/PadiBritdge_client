@@ -45,7 +45,7 @@ export default function Profile() {
 
       {user?.userType === 'miller' && (
         <div style={{ marginTop: '2rem' }}>
-          <StockListing isProfileView />
+          <StockListing isProfileView userId={userId} />
         </div>
       )}
     </section>

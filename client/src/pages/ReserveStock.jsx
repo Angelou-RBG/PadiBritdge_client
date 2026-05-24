@@ -64,9 +64,22 @@ export default function ReserveStock() {
   const handleAddItem = () => {
     if (tempVariety && tempQuantity) {
       const stockObj = stockListings.find(s => String(s.variety_id) === String(tempVariety));
+      const availableVolume = (stockObj?.physical_sacks || 0) - (stockObj?.allocated_sacks || 0);
+      
+      const currentCartQuantity = items
+        .filter(item => String(item.varietyId) === String(tempVariety))
+        .reduce((sum, item) => sum + item.requestedSacks, 0);
+        
+      const requestedAmount = Number(tempQuantity);
+
+      if (requestedAmount + currentCartQuantity > availableVolume) {
+        alert(`Cannot request ${requestedAmount} sacks. Only ${Math.max(0, availableVolume - currentCartQuantity)} more sacks of ${stockObj?.name} are available.`);
+        return;
+      }
+
       setItems(prev => [...prev, { 
         varietyId: Number(tempVariety), 
-        requestedSacks: Number(tempQuantity),
+        requestedSacks: requestedAmount,
         varietyName: stockObj?.name,
         qualityGrade: stockObj?.quality_grade,
         wholesalePrice: stockObj?.wholesale_price || 0
@@ -110,6 +123,16 @@ export default function ReserveStock() {
 
   if (isLoading) return <section className="page-shell"><div>Loading...</div></section>;
   if (error) return <section className="page-shell"><div className="error-text">{error}</div></section>;
+
+  let maxAllowed = '';
+  if (tempVariety) {
+    const stockObj = stockListings.find(s => String(s.variety_id) === String(tempVariety));
+    if (stockObj) {
+      const availableVolume = (stockObj?.physical_sacks || 0) - (stockObj?.allocated_sacks || 0);
+      const currentCartQuantity = items.filter(item => String(item.varietyId) === String(tempVariety)).reduce((sum, item) => sum + item.requestedSacks, 0);
+      maxAllowed = Math.max(0, availableVolume - currentCartQuantity);
+    }
+  }
 
   return (
     <section className="page-shell card-shell">
@@ -171,7 +194,7 @@ export default function ReserveStock() {
             </div>
             <div style={{ width: '100px' }}>
               <label style={{ fontSize: '0.8rem', display: 'block', color: '#475569' }}>Sacks</label>
-              <input type="number" min="1" step="1" value={tempQuantity} onChange={e => setTempQuantity(e.target.value)} disabled={isSubmitting} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+              <input type="number" min="1" max={maxAllowed !== '' ? maxAllowed : undefined} step="1" value={tempQuantity} onChange={e => setTempQuantity(e.target.value)} disabled={isSubmitting} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
             </div>
             <button type="button" onClick={handleAddItem} className="ghost-btn" style={{ padding: '0.5rem' }}>Add Item</button>
             <button type="button" onClick={handleAddItem} className="primary-btn" style={{ padding: '0.55rem 1rem', height: '36px' }}>Add</button>

@@ -3,7 +3,7 @@ import { getOrderRfqs, updateOrderRfq, getExternalRfqs, updateExternalRfq, creat
 import { useAuth } from '../context/AuthContext';
 import FloatingCard from './FloatingCard';
 
-export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
+export default function RFQSListing({ refreshKey = 0, onRfqUpdate, userId }) {
   const [rfqs, setRfqs] = useState([]);
   const [extRfqs, setExtRfqs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -32,12 +32,13 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
     let isActive = true;
 
     async function fetchRfqs() {
-      if (!user) return;
+      const currentUserId = userId || user?.id || user?._id;
+      if (!currentUserId) return;
       try {
         setIsLoading(true);
         const [internalData, externalData] = await Promise.all([
-          getOrderRfqs({ millerId: user.id || user._id }),
-          getExternalRfqs({ millerId: user.id || user._id })
+          getOrderRfqs({ millerId: currentUserId }),
+          getExternalRfqs({ millerId: currentUserId })
         ]);
         if (isActive) {
           setRfqs(internalData?.orderRfqs || []);
@@ -59,17 +60,30 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
     return () => {
       isActive = false;
     };
-  }, [refreshKey, localRefresh, user]);
+  }, [refreshKey, localRefresh, user, userId]);
 
   useEffect(() => {
     if (isAddModalOpen && stockListings.length === 0) {
-      getStockListings({ userId: user?.id || user?._id })
+      const currentUserId = userId || user?.id || user?._id;
+      getStockListings({ userId: currentUserId })
         .then(data => setStockListings(data.stockListings || []))
         .catch(console.error);
     }
-  }, [isAddModalOpen, stockListings.length, user]);
+  }, [isAddModalOpen, stockListings.length, user, userId]);
 
   const handleUpdateStatus = async (rfq, newStatus, isExternal = false) => {
+    if (newStatus === 'Approved') {
+      for (const item of (rfq.items || [])) {
+        if (item.physical_sacks !== undefined && item.allocated_sacks !== undefined) {
+          const available = Number(item.physical_sacks) - Number(item.allocated_sacks);
+          if (Number(item.requested_sacks) > available) {
+            alert(`Cannot approve request. ${item.variety_name} requires ${item.requested_sacks} sacks, but only ${available} are currently available in unallocated stock.`);
+            return;
+          }
+        }
+      }
+    }
+
     try {
       if (isExternal) {
         await updateExternalRfq(rfq.order_id, { status: newStatus });
@@ -139,9 +153,22 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
   const handleAddItem = () => {
     if (tempVariety && tempQuantity) {
       const stockObj = stockListings.find(s => String(s.variety_id) === String(tempVariety));
+      const availableVolume = (stockObj?.physical_sacks || 0) - (stockObj?.allocated_sacks || 0);
+      
+      const currentCartQuantity = items
+        .filter(item => String(item.varietyId) === String(tempVariety))
+        .reduce((sum, item) => sum + item.requestedSacks, 0);
+        
+      const requestedAmount = Number(tempQuantity);
+
+      if (requestedAmount + currentCartQuantity > availableVolume) {
+        alert(`Cannot allocate ${requestedAmount} sacks. Only ${Math.max(0, availableVolume - currentCartQuantity)} more sacks of ${stockObj?.name} are available.`);
+        return;
+      }
+
       setItems(prev => [...prev, { 
         varietyId: Number(tempVariety), 
-        requestedSacks: Number(tempQuantity),
+        requestedSacks: requestedAmount,
         varietyName: stockObj?.name,
         qualityGrade: stockObj?.quality_grade,
         wholesalePrice: stockObj?.wholesale_price || 0
@@ -163,10 +190,11 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
     }
     try {
       setIsSubmittingAdd(true);
+      const currentUserId = userId || user?.id || user?._id;
       if (requestType === 'internal') {
-        await createOrderRfq({ buyerId: buyerId ? Number(buyerId) : (user?.id || user?._id), millerId: user?.id || user?._id, items, fulfillmentDeadline: fulfillmentDeadline || null });
+        await createOrderRfq({ buyerId: buyerId ? Number(buyerId) : currentUserId, millerId: currentUserId, items, fulfillmentDeadline: fulfillmentDeadline || null });
       } else {
-        await createExternalRfq({ buyerName: buyerName.trim(), millerId: user?.id || user?._id, items, fulfillmentDeadline: fulfillmentDeadline || null });
+        await createExternalRfq({ buyerName: buyerName.trim(), millerId: currentUserId, items, fulfillmentDeadline: fulfillmentDeadline || null });
       }
       setIsAddModalOpen(false);
       setLocalRefresh(prev => prev + 1);
@@ -328,6 +356,16 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
     </div>
   );
 
+  let maxAllowed = '';
+  if (tempVariety) {
+    const stockObj = stockListings.find(s => String(s.variety_id) === String(tempVariety));
+    if (stockObj) {
+      const availableVolume = (stockObj?.physical_sacks || 0) - (stockObj?.allocated_sacks || 0);
+      const currentCartQuantity = items.filter(item => String(item.varietyId) === String(tempVariety)).reduce((sum, item) => sum + item.requestedSacks, 0);
+      maxAllowed = Math.max(0, availableVolume - currentCartQuantity);
+    }
+  }
+
   return (
     <div style={{ marginTop: '3rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -479,7 +517,7 @@ export default function RFQSListing({ refreshKey = 0, onRfqUpdate }) {
               </div>
               <div style={{ width: '100px' }}>
                 <label style={{ fontSize: '0.8rem', display: 'block', color: '#475569' }}>Sacks</label>
-                <input type="number" min="1" step="1" value={tempQuantity} onChange={e => setTempQuantity(e.target.value)} disabled={isSubmittingAdd} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+                <input type="number" min="1" max={maxAllowed !== '' ? maxAllowed : undefined} step="1" value={tempQuantity} onChange={e => setTempQuantity(e.target.value)} disabled={isSubmittingAdd} style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
               </div>
               <button type="button" onClick={handleAddItem} className="ghost-btn" style={{ padding: '0.5rem' }}>Add Item</button>
               <button type="button" onClick={handleAddItem} className="primary-btn" style={{ padding: '0.55rem 1rem', height: '36px' }}>Add</button>

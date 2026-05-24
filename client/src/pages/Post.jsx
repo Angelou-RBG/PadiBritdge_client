@@ -253,7 +253,7 @@ export default function Post() {
       <MediaHandler images={imageList} />
 
       {isPadiConnect && post?.attachmentType === 'stock_listing' && millerStocks.length > 0 && (
-        <div className="post-stock-table-container" style={{ marginTop: '1.5rem', marginBottom: '1.5rem' }}>
+        <div className="post-stock-table-container">
           <h4 style={{ marginBottom: '0.75rem' }}>Available Stock</h4>
           <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
             <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', minWidth: '600px' }}>

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import FloatingCard from './FloatingCard';
 import PostCard from './PostCard';
 
-export default function StockListing({ isProfileView, isManagerView, onAddRecord, onModifyRecord, refreshKey = 0 }) {
+export default function StockListing({ isProfileView, isManagerView, onAddRecord, onModifyRecord, refreshKey = 0, userId }) {
   const [stocks, setStocks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -43,7 +43,7 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
     async function fetchStocks() {
       try {
         setIsLoading(true);
-        const data = await getStockListings();
+        const data = await getStockListings(userId ? { userId } : {});
         if (isActive) {
           setStocks(data?.stockListings || []);
         }
@@ -63,7 +63,7 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
     return () => {
       isActive = false;
     };
-  }, [refreshKey, localRefresh]);
+  }, [refreshKey, localRefresh, userId]);
 
   useEffect(() => {
     if (!isTransactionModalOpen) {
@@ -74,7 +74,8 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
 
     async function fetchTransactionStocks() {
       try {
-        const data = await getStockListings({ userId: user?.id || user?._id });
+        const currentUserId = userId || user?.id || user?._id;
+        const data = await getStockListings({ userId: currentUserId });
         if (isActive) {
           setTransactionStocks(data?.stockListings || []);
         }
@@ -90,7 +91,7 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
     return () => {
       isActive = false;
     };
-  }, [isTransactionModalOpen, user]);
+  }, [isTransactionModalOpen, user, userId]);
 
   useEffect(() => {
     if (!isTransactionModalOpen) {
@@ -155,6 +156,18 @@ export default function StockListing({ isProfileView, isManagerView, onAddRecord
     }
 
     try {
+      const isOutbound = addTransactionTypes.some(t => t.type_name === selectedTransactionType);
+      if (isOutbound && transactionMode === 'add-transaction') {
+        const stock = transactionStocks.find(s => String(s.variety_id) === String(selectedTransactionStockId));
+        if (stock) {
+          const availableForOutbound = (stock.physical_sacks || 0) - (stock.allocated_sacks || 0);
+          if (Number(transactionQuantity) > availableForOutbound) {
+            alert(`Cannot deduct ${transactionQuantity} sacks. Only ${availableForOutbound} unallocated sacks are available. Deducting this would result in negative available stock.`);
+            return;
+          }
+        }
+      }
+
       setIsSubmittingTransaction(true);
       const currentUserId = user?.id || user?._id;
       await createInventoryLog({

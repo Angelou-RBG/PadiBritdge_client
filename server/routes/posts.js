@@ -190,7 +190,7 @@ router.get('/api/posts/:id/comments', (request, response) => {
         const commentSectionId = section.comment_section_id
 
         db.all(
-            `SELECT c.*, u.full_name
+            `SELECT c.*, u.full_name, u.username
              FROM comments c
              JOIN users u ON c.user_id = u.id
              WHERE c.comment_section_id = ?
@@ -259,7 +259,7 @@ router.post('/api/posts/:id/comments', (request, response) => {
 
             const newCommentId = this.lastID
 
-            db.get('SELECT c.*, u.full_name FROM comments c JOIN users u ON c.user_id = u.id WHERE c.comment_id = ?', [newCommentId], (fetchError, newComment) => {
+            db.get('SELECT c.*, u.full_name, u.username FROM comments c JOIN users u ON c.user_id = u.id WHERE c.comment_id = ?', [newCommentId], (fetchError, newComment) => {
                 if (fetchError) {
                     return response.status(201).json({ comment: { id: newCommentId } })
                 }

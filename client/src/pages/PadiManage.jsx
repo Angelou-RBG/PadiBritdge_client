@@ -67,6 +67,11 @@ export default function PadiManage() {
       const nextPrice = Number(modifyPrice);
       const changedFields = [];
 
+      if (nextAllocated > nextPhysical) {
+        setNotification({ type: 'error', message: 'Allocated volume cannot exceed total physical volume.' });
+        return;
+      }
+
       if (Number(currentStock.physical_sacks) !== nextPhysical) {
         changedFields.push('physical_sacks');
       }
@@ -127,9 +132,14 @@ export default function PadiManage() {
       <h2 style={{ marginTop: 0, marginBottom: '0.5rem' }}>PadiManage System</h2>
       <p style={{ marginBottom: '2rem' }}>Manage your inventory records, update stock volumes, and generate reports.</p>
 
-      <StockListing isManagerView onModifyRecord={() => setIsModifyModalOpen(true)} refreshKey={refreshKey} />
+      <StockListing 
+        isManagerView 
+        userId={user?.id || user?._id} 
+        onModifyRecord={() => setIsModifyModalOpen(true)} 
+        refreshKey={refreshKey} 
+      />
 
-      <RFQSListing refreshKey={refreshKey} onRfqUpdate={() => setRefreshKey(prev => prev + 1)} />
+      <RFQSListing userId={user?.id || user?._id} refreshKey={refreshKey} onRfqUpdate={() => setRefreshKey(prev => prev + 1)} />
 
       <FloatingCard
         open={isModifyModalOpen}
